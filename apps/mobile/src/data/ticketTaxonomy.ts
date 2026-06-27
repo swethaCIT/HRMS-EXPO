@@ -328,6 +328,68 @@ export const PRIORITIES: { key: Priority; color: string; bg: string }[] = [
 export const WORK_MODES = ['Office', 'Remote', 'Hybrid'] as const;
 export type WorkMode = typeof WORK_MODES[number];
 
+/* ── Ticket status & approval ── */
+export type TicketStatus = 'Open' | 'In Progress' | 'Resolved' | 'Closed';
+export type Approval     = 'Pending' | 'Approved' | 'Rejected';
+
+export interface TimelineEvent {
+  label: string;
+  at: string | null;     // null = not reached yet
+  by?: string;
+  note?: string;
+}
+
+export interface Ticket {
+  id: string;
+  subject: string;
+  dept: string;
+  category: string;
+  subCategory: string;
+  priority: Priority;
+  status: TicketStatus;
+  approval: Approval;
+  createdAt: string;
+  agent?: string;
+  description?: string;
+  notify?: string[];
+  attachments?: string[];
+  timeline?: TimelineEvent[];
+}
+
+export const STATUS_STYLE: Record<TicketStatus, { color: string; bg: string }> = {
+  'Open':        { color: '#2563EB', bg: '#DBEAFE' },
+  'In Progress': { color: '#B45309', bg: '#FEF3C7' },
+  'Resolved':    { color: '#065F46', bg: '#D1FAE5' },
+  'Closed':      { color: '#6B7280', bg: '#F3F4F6' },
+};
+
+export const APPROVAL_STYLE: Record<Approval, { color: string; bg: string; icon: string }> = {
+  'Pending':  { color: '#B45309', bg: '#FEF3C7', icon: '⏳' },
+  'Approved': { color: '#065F46', bg: '#D1FAE5', icon: '✓' },
+  'Rejected': { color: '#991B1B', bg: '#FEE2E2', icon: '✕' },
+};
+
+/* Build the stage tracker for a ticket from its status + approval. */
+export function buildTracker(t: Ticket): { label: string; done: boolean; current: boolean; rejected?: boolean }[] {
+  if (t.approval === 'Rejected') {
+    return [
+      { label: 'Submitted',        done: true,  current: false },
+      { label: 'Pending Approval', done: true,  current: false },
+      { label: 'Rejected',         done: true,  current: true, rejected: true },
+    ];
+  }
+  const order: TicketStatus[] = ['Open', 'In Progress', 'Resolved', 'Closed'];
+  const idx = order.indexOf(t.status);
+  const approved = t.approval === 'Approved';
+  return [
+    { label: 'Submitted',        done: true,                       current: false },
+    { label: 'Pending Approval', done: approved,                   current: !approved },
+    { label: 'Approved',         done: approved && idx >= 0,       current: approved && t.status === 'Open' },
+    { label: 'In Progress',      done: idx >= 1,                   current: t.status === 'In Progress' },
+    { label: 'Resolved',         done: idx >= 2,                   current: t.status === 'Resolved' || t.status === 'Closed' },
+  ];
+}
+
 /* ── Mock directory for "Notify To" ── */
 export interface Person { id: string; name: string; initials: string; }
 

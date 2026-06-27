@@ -2,28 +2,10 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar,
 } from 'react-native';
-import { PRIORITIES, Priority } from '../../data/ticketTaxonomy';
-
-type Status = 'Open' | 'In Progress' | 'Resolved' | 'Closed';
-
-interface Ticket {
-  id: string;
-  subject: string;
-  dept: string;
-  category: string;
-  subCategory: string;
-  priority: Priority;
-  status: Status;
-  createdAt: string;
-  agent?: string;
-}
-
-const STATUS_STYLE: Record<Status, { color: string; bg: string }> = {
-  'Open':        { color: '#2563EB', bg: '#DBEAFE' },
-  'In Progress': { color: '#B45309', bg: '#FEF3C7' },
-  'Resolved':    { color: '#065F46', bg: '#D1FAE5' },
-  'Closed':      { color: '#6B7280', bg: '#F3F4F6' },
-};
+import {
+  PRIORITIES, STATUS_STYLE, APPROVAL_STYLE,
+  Ticket, TicketStatus,
+} from '../../data/ticketTaxonomy';
 
 const DEPT_ICON: Record<string, string> = { HR: '🧑‍💼', IT: '💻', Admin: '🗂️', Others: '❓' };
 
@@ -31,30 +13,60 @@ const INITIAL: Ticket[] = [
   {
     id: 'TKT-1043', subject: 'Laptop not powering on after update',
     dept: 'IT', category: 'Hardware', subCategory: 'Laptop Issue',
-    priority: 'High', status: 'In Progress', createdAt: '26 Jun 2026', agent: 'IT Helpdesk',
+    priority: 'High', status: 'In Progress', approval: 'Approved',
+    createdAt: '26 Jun 2026', agent: 'IT Helpdesk',
+    description: 'My laptop does not power on after the latest Windows update. The charging light blinks but the screen stays black even after a hard reset.',
+    notify: ['Karthik R.', 'Priya S.'],
+    timeline: [
+      { label: 'Ticket submitted',        at: '26 Jun 2026, 09:12 AM', by: 'You' },
+      { label: 'Approved by HOD',         at: '26 Jun 2026, 10:05 AM', by: 'Manager' },
+      { label: 'Assigned to IT Helpdesk', at: '26 Jun 2026, 10:30 AM', by: 'System' },
+      { label: 'Diagnosis in progress',   at: '26 Jun 2026, 02:15 PM', by: 'IT Helpdesk', note: 'Motherboard check scheduled.' },
+    ],
   },
   {
     id: 'TKT-1039', subject: 'Form 16 for FY 2025-26 not available',
     dept: 'HR', category: 'Payroll & Benefits', subCategory: 'Form 16',
-    priority: 'Medium', status: 'Open', createdAt: '24 Jun 2026',
+    priority: 'Medium', status: 'Open', approval: 'Pending',
+    createdAt: '24 Jun 2026',
+    description: 'Form 16 for the financial year 2025-26 is not showing up in the payroll portal. Need it for filing income tax returns.',
+    notify: ['Priya S.'],
+    timeline: [
+      { label: 'Ticket submitted',  at: '24 Jun 2026, 04:40 PM', by: 'You' },
+      { label: 'Awaiting approval', at: null },
+    ],
   },
   {
     id: 'TKT-1031', subject: 'VPN access request for remote work',
     dept: 'IT', category: 'Access Management', subCategory: 'VPN Access',
-    priority: 'Low', status: 'Resolved', createdAt: '20 Jun 2026', agent: 'Network Team',
+    priority: 'Low', status: 'Resolved', approval: 'Approved',
+    createdAt: '20 Jun 2026', agent: 'Network Team',
+    description: 'Requesting VPN access to connect to internal resources while working remotely.',
+    timeline: [
+      { label: 'Ticket submitted',        at: '20 Jun 2026, 11:00 AM', by: 'You' },
+      { label: 'Approved by HOD',         at: '20 Jun 2026, 12:30 PM', by: 'Manager' },
+      { label: 'Assigned to Network Team', at: '20 Jun 2026, 01:00 PM', by: 'System' },
+      { label: 'VPN access granted',      at: '21 Jun 2026, 09:45 AM', by: 'Network Team', note: 'Credentials shared over secure email.' },
+    ],
   },
   {
     id: 'TKT-1024', subject: 'Reset password for HRMS portal',
     dept: 'Admin', category: 'User Management', subCategory: 'Reset Password',
-    priority: 'Critical', status: 'Closed', createdAt: '15 Jun 2026', agent: 'Admin',
+    priority: 'Critical', status: 'Closed', approval: 'Rejected',
+    createdAt: '15 Jun 2026', agent: 'Admin',
+    description: 'Unable to log in to the HRMS portal. Requesting a password reset.',
+    timeline: [
+      { label: 'Ticket submitted', at: '15 Jun 2026, 08:20 AM', by: 'You' },
+      { label: 'Rejected',         at: '15 Jun 2026, 09:00 AM', by: 'Admin', note: 'Use the self-service "Forgot Password" link instead.' },
+    ],
   },
 ];
 
-const FILTERS: ('All' | Status)[] = ['All', 'Open', 'In Progress', 'Resolved', 'Closed'];
+const FILTERS: ('All' | TicketStatus)[] = ['All', 'Open', 'In Progress', 'Resolved', 'Closed'];
 
 export default function TicketsScreen({ navigation, route }: any) {
   const [tickets, setTickets] = useState<Ticket[]>(INITIAL);
-  const [filter, setFilter]   = useState<'All' | Status>('All');
+  const [filter, setFilter]   = useState<'All' | TicketStatus>('All');
 
   /* receive a freshly-raised ticket from the wizard */
   useEffect(() => {
@@ -69,7 +81,15 @@ export default function TicketsScreen({ navigation, route }: any) {
       subCategory: nt.subCategory,
       priority: nt.priority,
       status: 'Open',
+      approval: 'Pending',
       createdAt: '27 Jun 2026',
+      description: nt.description,
+      notify: nt.notify,
+      attachments: nt.attachments,
+      timeline: [
+        { label: 'Ticket submitted',  at: '27 Jun 2026, 10:00 AM', by: 'You' },
+        { label: 'Awaiting approval', at: null },
+      ],
     };
     setTickets(prev => [created, ...prev]);
     navigation.setParams({ newTicket: undefined });
@@ -142,8 +162,14 @@ export default function TicketsScreen({ navigation, route }: any) {
         {visible.map(t => {
           const st  = STATUS_STYLE[t.status];
           const pri = PRIORITIES.find(p => p.key === t.priority)!;
+          const ap  = APPROVAL_STYLE[t.approval];
           return (
-            <View key={t.id} style={s.card}>
+            <TouchableOpacity
+              key={t.id}
+              style={s.card}
+              activeOpacity={0.85}
+              onPress={() => navigation?.navigate('TicketDetail', { ticket: t })}
+            >
               <View style={s.cardTop}>
                 <View style={s.deptTag}>
                   <Text style={s.deptTagIcon}>{DEPT_ICON[t.dept] ?? '🎫'}</Text>
@@ -158,16 +184,28 @@ export default function TicketsScreen({ navigation, route }: any) {
               <Text style={s.subject} numberOfLines={2}>{t.subject}</Text>
               <Text style={s.path}>{t.category} › {t.subCategory}</Text>
 
+              {/* approval row */}
+              <View style={s.approvalRow}>
+                <View style={[s.approvalBadge, { backgroundColor: ap.bg }]}>
+                  <Text style={[s.approvalText, { color: ap.color }]}>{ap.icon} {t.approval}</Text>
+                </View>
+                <Text style={s.approvalHint}>
+                  {t.approval === 'Pending'  ? 'Awaiting manager approval'
+                    : t.approval === 'Approved' ? 'Approved · being handled'
+                    : 'Request rejected'}
+                </Text>
+              </View>
+
               <View style={s.cardFooter}>
                 <View style={[s.priChip, { backgroundColor: pri.bg }]}>
                   <View style={[s.priDot, { backgroundColor: pri.color }]} />
                   <Text style={[s.priText, { color: pri.color }]}>{t.priority}</Text>
                 </View>
                 <Text style={s.metaText}>
-                  {t.agent ? `${t.agent} · ` : ''}{t.createdAt}
+                  {t.agent ? `${t.agent} · ` : ''}{t.createdAt}  ›
                 </Text>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })}
       </ScrollView>
@@ -236,6 +274,11 @@ const s = StyleSheet.create({
 
   subject: { fontSize: 15, fontWeight: '700', color: '#1F2937', lineHeight: 21 },
   path:    { fontSize: 12, color: '#6B7280', marginTop: 4 },
+
+  approvalRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+  approvalBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  approvalText:  { fontSize: 11, fontWeight: '700' },
+  approvalHint:  { fontSize: 11, color: '#9CA3AF', flex: 1 },
 
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
   priChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
