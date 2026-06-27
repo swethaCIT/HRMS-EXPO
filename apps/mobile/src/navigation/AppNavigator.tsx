@@ -18,10 +18,10 @@ const Tab   = createBottomTabNavigator();
 
 /* ── Tab icon map ── */
 const TAB_ICONS: Record<string, string> = {
-  Home:       '🏠',
-  Attendance: '📋',
-  Tickets:    '🎫',
-  Profile:    '👤',
+  Home:    '🏠',
+  Tickets: '🎫',
+  Leave:   '📋',
+  Profile: '👤',
 };
 
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
@@ -64,10 +64,10 @@ function MainTabs() {
         },
       })}
     >
-      <Tab.Screen name="Home"       component={DashboardScreen} />
-      <Tab.Screen name="Attendance" component={AttendanceScreen} />
-      <Tab.Screen name="Tickets"    component={LeavesScreen} />
-      <Tab.Screen name="Profile"    component={ProfileScreen} />
+      <Tab.Screen name="Home"    component={DashboardScreen} />
+      <Tab.Screen name="Tickets" component={AttendanceScreen} />
+      <Tab.Screen name="Leave"   component={LeavesScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }
