@@ -11,6 +11,17 @@ export const login = createAsyncThunk(
       await AsyncStorage.setItem('access_token', data.access_token);
       return data;
     } catch (err: any) {
+      // Demo fallback: when the backend isn't running, allow exploring the UI
+      // with any credentials. Real auth is used whenever the API is reachable.
+      const isNetworkError = !err.response;
+      if (isNetworkError) {
+        const demo = {
+          access_token: 'demo-token',
+          user: { id: 'demo', email, name: email.split('@')[0] || 'Demo User', role: 'employee' },
+        };
+        await AsyncStorage.setItem('access_token', demo.access_token);
+        return demo;
+      }
       return rejectWithValue(err.response?.data?.message || 'Login failed');
     }
   },
