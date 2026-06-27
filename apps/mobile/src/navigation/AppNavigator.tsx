@@ -13,6 +13,8 @@ import LeavesScreen     from '../screens/leaves/LeavesScreen';
 import PayrollScreen    from '../screens/payroll/PayrollScreen';
 import ProfileScreen    from '../screens/profile/ProfileScreen';
 import AssetsScreen     from '../screens/assets/AssetsScreen';
+import TicketsScreen    from '../screens/tickets/TicketsScreen';
+import RaiseTicketScreen from '../screens/tickets/RaiseTicketScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -66,7 +68,7 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Home"    component={DashboardScreen} />
-      <Tab.Screen name="Tickets" component={AttendanceScreen} />
+      <Tab.Screen name="Tickets" component={TicketsScreen} />
       <Tab.Screen name="Leave"   component={LeavesScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
@@ -81,9 +83,11 @@ export default function AppNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {token ? (
           <>
-            <Stack.Screen name="Main"    component={MainTabs} />
-            <Stack.Screen name="Assets"  component={AssetsScreen} />
-            <Stack.Screen name="Payroll" component={PayrollScreen} />
+            <Stack.Screen name="Main"        component={MainTabs} />
+            <Stack.Screen name="Assets"      component={AssetsScreen} />
+            <Stack.Screen name="Payroll"     component={PayrollScreen} />
+            <Stack.Screen name="Timesheet"   component={AttendanceScreen} />
+            <Stack.Screen name="RaiseTicket" component={RaiseTicketScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

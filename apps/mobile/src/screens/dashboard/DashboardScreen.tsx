@@ -149,8 +149,9 @@ export default function DashboardScreen({ navigation }: any) {
                 style={styles.quickChip}
                 activeOpacity={0.8}
                 onPress={() => {
-                  if (item.label === 'Assets')  navigation?.navigate('Assets');
-                  if (item.label === 'Payslip') navigation?.navigate('Payroll');
+                  if (item.label === 'Assets')    navigation?.navigate('Assets');
+                  if (item.label === 'Payslip')   navigation?.navigate('Payroll');
+                  if (item.label === 'Timesheet') navigation?.navigate('Timesheet');
                 }}
               >
                 <Text style={styles.quickEmoji}>{item.emoji}</Text>
