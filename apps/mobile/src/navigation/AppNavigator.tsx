@@ -12,6 +12,7 @@ import AttendanceScreen from '../screens/attendance/AttendanceScreen';
 import LeavesScreen     from '../screens/leaves/LeavesScreen';
 import PayrollScreen    from '../screens/payroll/PayrollScreen';
 import ProfileScreen    from '../screens/profile/ProfileScreen';
+import AssetsScreen     from '../screens/assets/AssetsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -79,7 +80,10 @@ export default function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {token ? (
-          <Stack.Screen name="Main"  component={MainTabs} />
+          <>
+            <Stack.Screen name="Main"   component={MainTabs} />
+            <Stack.Screen name="Assets" component={AssetsScreen} />
+          </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />
         )}

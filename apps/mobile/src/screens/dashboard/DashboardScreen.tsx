@@ -35,7 +35,7 @@ function formatCardDate() {
   });
 }
 
-export default function DashboardScreen() {
+export default function DashboardScreen({ navigation }: any) {
   const { user } = useSelector((state: RootState) => state.auth);
   const initials = user?.email
     ? (user.email.split('@')[0].substring(0, 2)).toUpperCase()
@@ -123,6 +123,7 @@ export default function DashboardScreen() {
                 key={item.label}
                 style={[styles.overviewCard, { backgroundColor: item.bg }]}
                 activeOpacity={0.8}
+                onPress={() => item.label === 'My Assets' && navigation?.navigate('Assets')}
               >
                 <View style={[styles.overviewIconCircle, { backgroundColor: item.iconBg }]}>
                   <Text style={styles.overviewEmoji}>{item.emoji}</Text>
@@ -143,7 +144,12 @@ export default function DashboardScreen() {
               { emoji: '⏱',  label: 'Timesheet' },
               { emoji: '📦', label: 'Assets' },
             ].map((item) => (
-              <TouchableOpacity key={item.label} style={styles.quickChip} activeOpacity={0.8}>
+              <TouchableOpacity
+                key={item.label}
+                style={styles.quickChip}
+                activeOpacity={0.8}
+                onPress={() => item.label === 'Assets' && navigation?.navigate('Assets')}
+              >
                 <Text style={styles.quickEmoji}>{item.emoji}</Text>
                 <Text style={styles.quickLabel}>{item.label}</Text>
               </TouchableOpacity>
