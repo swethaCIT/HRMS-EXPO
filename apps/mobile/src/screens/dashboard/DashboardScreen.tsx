@@ -148,7 +148,10 @@ export default function DashboardScreen({ navigation }: any) {
                 key={item.label}
                 style={styles.quickChip}
                 activeOpacity={0.8}
-                onPress={() => item.label === 'Assets' && navigation?.navigate('Assets')}
+                onPress={() => {
+                  if (item.label === 'Assets')  navigation?.navigate('Assets');
+                  if (item.label === 'Payslip') navigation?.navigate('Payroll');
+                }}
               >
                 <Text style={styles.quickEmoji}>{item.emoji}</Text>
                 <Text style={styles.quickLabel}>{item.label}</Text>

@@ -81,8 +81,9 @@ export default function AppNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {token ? (
           <>
-            <Stack.Screen name="Main"   component={MainTabs} />
-            <Stack.Screen name="Assets" component={AssetsScreen} />
+            <Stack.Screen name="Main"    component={MainTabs} />
+            <Stack.Screen name="Assets"  component={AssetsScreen} />
+            <Stack.Screen name="Payroll" component={PayrollScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />
