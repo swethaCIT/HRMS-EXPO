@@ -57,4 +57,6 @@ export interface AuthState {
   token: string | null;
   isLoading: boolean;
   error: string | null;
+  /** Which experience the signed-in user is currently viewing. */
+  viewMode: 'manager' | 'employee';
 }
