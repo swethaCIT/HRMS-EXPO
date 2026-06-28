@@ -5,7 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import { isManagerRole } from '../store/slices/authSlice';
+import { isManagerRole, managementKind } from '../store/slices/authSlice';
 
 import LoginScreen      from '../screens/auth/LoginScreen';
 import DashboardScreen  from '../screens/dashboard/DashboardScreen';
@@ -24,12 +24,18 @@ import TeamScreen             from '../screens/manager/TeamScreen';
 import TeamMemberDetailScreen from '../screens/manager/TeamMemberDetailScreen';
 import InsightsScreen         from '../screens/manager/InsightsScreen';
 
+import HRDashboardScreen from '../screens/hr/HRDashboardScreen';
+import PeopleScreen      from '../screens/hr/PeopleScreen';
+import RequestsScreen    from '../screens/hr/RequestsScreen';
+import HRInsightsScreen  from '../screens/hr/HRInsightsScreen';
+
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
 
 /* ── Tab icon maps ── */
 const EMP_ICONS: Record<string, string> = { Home: '🏠', Tickets: '🎫', Leave: '📋', Profile: '👤' };
 const MGR_ICONS: Record<string, string> = { Home: '🏠', Approvals: '✅', Team: '👥', Insights: '📈', Profile: '👤' };
+const HR_ICONS: Record<string, string>  = { Home: '🏠', Requests: '📨', People: '👥', Insights: '📊', Profile: '👤' };
 
 function TabIcon({ name, focused, icons, badge }: { name: string; focused: boolean; icons: Record<string, string>; badge?: number }) {
   return (
@@ -105,27 +111,54 @@ function ManagerTabs() {
   );
 }
 
+/* ── HR tabs (org-wide; also used by admin) ── */
+function HRTabs() {
+  const pending = useSelector((s: RootState) => s.hrRequests.items.filter((i) => i.status === 'pending').length);
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        ...commonScreenOptions,
+        tabBarIcon: ({ focused }) => (
+          <TabIcon name={route.name} focused={focused} icons={HR_ICONS} badge={route.name === 'Requests' ? pending : undefined} />
+        ),
+      })}
+    >
+      <Tab.Screen name="Home"     component={HRDashboardScreen} />
+      <Tab.Screen name="Requests" component={RequestsScreen} />
+      <Tab.Screen name="People"   component={PeopleScreen} />
+      <Tab.Screen name="Insights" component={HRInsightsScreen} />
+      <Tab.Screen name="Profile"  component={ProfileScreen} />
+    </Tab.Navigator>
+  );
+}
+
 export default function AppNavigator() {
   const { token, user, viewMode } = useSelector((state: RootState) => state.auth);
-  const managerView = isManagerRole(user?.role) && viewMode === 'manager';
+  const inManagementView = isManagerRole(user?.role) && viewMode === 'manager';
+  const kind = managementKind(user?.role); // 'hr' | 'manager' | null
+
+  const MainTabs = !inManagementView ? EmployeeTabs : kind === 'hr' ? HRTabs : ManagerTabs;
 
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {token ? (
           <>
-            <Stack.Screen name="Main" component={managerView ? ManagerTabs : EmployeeTabs} />
+            <Stack.Screen name="Main" component={MainTabs} />
             {/* shared employee stack screens */}
             <Stack.Screen name="Assets"       component={AssetsScreen} />
             <Stack.Screen name="Payroll"      component={PayrollScreen} />
             <Stack.Screen name="Timesheet"    component={AttendanceScreen} />
             <Stack.Screen name="RaiseTicket"  component={RaiseTicketScreen} />
             <Stack.Screen name="TicketDetail" component={TicketDetailScreen} />
-            {/* manager stack screens (also reachable from the manager dashboard) */}
+            {/* manager stack screens (reachable from the manager dashboard) */}
             <Stack.Screen name="Approvals"  component={ApprovalsScreen} />
             <Stack.Screen name="Team"       component={TeamScreen} />
             <Stack.Screen name="Insights"   component={InsightsScreen} />
             <Stack.Screen name="TeamMember" component={TeamMemberDetailScreen} />
+            {/* HR stack screens (reachable from the HR dashboard) */}
+            <Stack.Screen name="Requests"   component={RequestsScreen} />
+            <Stack.Screen name="People"     component={PeopleScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

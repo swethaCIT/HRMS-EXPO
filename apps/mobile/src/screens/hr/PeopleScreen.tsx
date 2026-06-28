@@ -2,47 +2,41 @@ import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput,
 } from 'react-native';
-import {
-  T, TEAM, PRESENCE_META, Presence, initialsOf, avatarColor,
-} from '../../data/managerData';
+import { PRESENCE_META, initialsOf, avatarColor } from '../../data/managerData';
+import { T, HR_PEOPLE } from '../../data/hrData';
 
-const FILTERS: { key: 'all' | Presence; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'in', label: 'In office' },
-  { key: 'remote', label: 'Remote' },
-  { key: 'leave', label: 'On leave' },
-  { key: 'out', label: 'Not in' },
-];
-
-export default function TeamScreen({ navigation }: any) {
+export default function PeopleScreen({ navigation }: any) {
   const [q, setQ] = useState('');
-  const [filter, setFilter] = useState<'all' | Presence>('all');
+  const [dept, setDept] = useState<'All' | string>('All');
+
+  const departments = useMemo(
+    () => ['All', ...Array.from(new Set(HR_PEOPLE.map((p) => p.department)))],
+    [],
+  );
 
   const list = useMemo(() => {
-    return TEAM.filter((m) => {
-      const matchesFilter = filter === 'all' || m.presence === filter;
-      const matchesQ =
+    return HR_PEOPLE.filter((p) => {
+      const matchDept = dept === 'All' || p.department === dept;
+      const matchQ =
         !q ||
-        m.name.toLowerCase().includes(q.toLowerCase()) ||
-        m.designation.toLowerCase().includes(q.toLowerCase()) ||
-        m.department.toLowerCase().includes(q.toLowerCase());
-      return matchesFilter && matchesQ;
+        p.name.toLowerCase().includes(q.toLowerCase()) ||
+        p.designation.toLowerCase().includes(q.toLowerCase()) ||
+        p.employeeId.toLowerCase().includes(q.toLowerCase());
+      return matchDept && matchQ;
     });
-  }, [q, filter]);
+  }, [q, dept]);
 
   return (
     <View style={st.root}>
       <StatusBar barStyle="light-content" backgroundColor={T.header} />
-
       <View style={st.header}>
-        <Text style={st.hTitle}>My Team</Text>
-        <Text style={st.hSub}>{TEAM.length} members · {TEAM.filter((m) => m.presence === 'in' || m.presence === 'remote').length} available now</Text>
-
+        <Text style={st.hTitle}>People</Text>
+        <Text style={st.hSub}>{HR_PEOPLE.length} employees · {departments.length - 1} departments</Text>
         <View style={st.searchBox}>
           <Text style={{ fontSize: 15 }}>🔍</Text>
           <TextInput
             style={st.searchInput}
-            placeholder="Search name, role, department"
+            placeholder="Search name, role, employee ID"
             placeholderTextColor="rgba(255,255,255,0.5)"
             value={q}
             onChangeText={setQ}
@@ -52,9 +46,9 @@ export default function TeamScreen({ navigation }: any) {
 
       <View style={st.filterBar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
-          {FILTERS.map((f) => (
-            <TouchableOpacity key={f.key} style={[st.chip, filter === f.key && st.chipActive]} onPress={() => setFilter(f.key)}>
-              <Text style={[st.chipTx, filter === f.key && st.chipTxActive]}>{f.label}</Text>
+          {departments.map((d) => (
+            <TouchableOpacity key={d} style={[st.chip, dept === d && st.chipActive]} onPress={() => setDept(d)}>
+              <Text style={[st.chipTx, dept === d && st.chipTxActive]}>{d}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -62,38 +56,28 @@ export default function TeamScreen({ navigation }: any) {
 
       <ScrollView style={st.body} contentContainerStyle={{ padding: 16, paddingBottom: 96 }} showsVerticalScrollIndicator={false}>
         {list.length === 0 && (
-          <View style={st.empty}><Text style={{ fontSize: 38 }}>🔍</Text><Text style={st.emptyTx}>No members match</Text></View>
+          <View style={st.empty}><Text style={{ fontSize: 38 }}>🔍</Text><Text style={st.emptyTx}>No employees match</Text></View>
         )}
-        {list.map((m) => {
-          const pm = PRESENCE_META[m.presence];
+        {list.map((p) => {
+          const pm = PRESENCE_META[p.presence];
           return (
-            <TouchableOpacity key={m.id} style={st.card} activeOpacity={0.85} onPress={() => navigation?.navigate('TeamMember', { member: m })}>
+            <TouchableOpacity key={p.id} style={st.card} activeOpacity={0.85} onPress={() => navigation?.navigate('TeamMember', { member: p })}>
               <View style={{ position: 'relative' }}>
-                <View style={[st.avatar, { backgroundColor: avatarColor(m.name) }]}>
-                  <Text style={st.avatarTx}>{initialsOf(m.name)}</Text>
+                <View style={[st.avatar, { backgroundColor: avatarColor(p.name) }]}>
+                  <Text style={st.avatarTx}>{initialsOf(p.name)}</Text>
                 </View>
                 <View style={[st.presenceDot, { backgroundColor: pm.dot }]} />
               </View>
-
               <View style={{ flex: 1 }}>
-                <Text style={st.name}>{m.name}</Text>
-                <Text style={st.desig}>{m.designation} · {m.department}</Text>
+                <Text style={st.name}>{p.name}</Text>
+                <Text style={st.desig}>{p.designation}</Text>
                 <View style={st.metaRow}>
-                  <View style={[st.presChip, { backgroundColor: pm.chipBg }]}>
-                    <Text style={[st.presChipTx, { color: pm.chipFg }]}>{pm.label}</Text>
-                  </View>
-                  {!!m.checkIn && m.presence !== 'leave' && m.presence !== 'out' && (
-                    <Text style={st.checkIn}>🕐 {m.checkIn}</Text>
-                  )}
-                  {m.pending > 0 && (
-                    <View style={st.pendingChip}><Text style={st.pendingTx}>{m.pending} pending</Text></View>
-                  )}
+                  <View style={st.deptTag}><Text style={st.deptTagTx}>{p.department}</Text></View>
+                  <Text style={st.empId}>{p.employeeId}</Text>
                 </View>
               </View>
-
-              <View style={st.attBox}>
-                <Text style={st.attNum}>{m.attendancePct}%</Text>
-                <Text style={st.attLabel}>att.</Text>
+              <View style={[st.presChip, { backgroundColor: pm.chipBg }]}>
+                <Text style={[st.presChipTx, { color: pm.chipFg }]}>{pm.label}</Text>
               </View>
             </TouchableOpacity>
           );
@@ -124,15 +108,12 @@ const st = StyleSheet.create({
   presenceDot: { position: 'absolute', bottom: 0, right: 0, width: 13, height: 13, borderRadius: 7, borderWidth: 2, borderColor: '#FFF' },
   name: { fontSize: 15, fontWeight: '700', color: T.ink },
   desig: { fontSize: 12, color: T.sub, marginTop: 1 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 7, flexWrap: 'wrap' },
-  presChip: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 7 },
+  deptTag: { backgroundColor: '#EEF2FF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  deptTagTx: { fontSize: 10.5, fontWeight: '700', color: T.primary },
+  empId: { fontSize: 11, color: T.faint, fontWeight: '600' },
+  presChip: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
   presChipTx: { fontSize: 10, fontWeight: '700' },
-  checkIn: { fontSize: 11, color: T.faint },
-  pendingChip: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: '#FEF3C7' },
-  pendingTx: { fontSize: 10, fontWeight: '700', color: '#B45309' },
-  attBox: { alignItems: 'center' },
-  attNum: { fontSize: 16, fontWeight: '800', color: T.primary },
-  attLabel: { fontSize: 10, color: T.faint },
 
   empty: { alignItems: 'center', paddingTop: 70, gap: 12 },
   emptyTx: { fontSize: 14, color: T.faint, fontWeight: '500' },

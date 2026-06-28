@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import {
-  T, TEAM, PRESENCE_META, initialsOf, avatarColor,
+  T, TEAM, PRESENCE_META, initialsOf, avatarColor, TeamMember,
 } from '../../data/managerData';
 
 function Ring({ pct, color, label }: { pct: number; color: string; label: string }) {
@@ -30,8 +30,9 @@ const ringSt = StyleSheet.create({
 });
 
 export default function TeamMemberDetailScreen({ route, navigation }: any) {
+  // Accept either a full member object (People / Team) or an id to look up.
   const id = route?.params?.id;
-  const m = TEAM.find((x) => x.id === id) ?? TEAM[0];
+  const m: TeamMember = route?.params?.member ?? TEAM.find((x) => x.id === id) ?? TEAM[0];
   const pm = PRESENCE_META[m.presence];
 
   return (

@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
-import { logout, toggleViewMode, isManagerRole } from '../../store/slices/authSlice';
+import { logout, toggleViewMode, isManagerRole, managementKind } from '../../store/slices/authSlice';
 import { T, initialsOf } from '../../data/managerData';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -17,12 +17,24 @@ export default function ProfileScreen({ navigation }: any) {
 
   const name = (user?.email?.split('@')[0] || 'User').replace(/\./g, ' ');
   const canManage = isManagerRole(user?.role);
+  const kind = managementKind(user?.role); // 'hr' | 'manager' | null
+  const viewLabel = kind === 'hr' ? 'HR view' : 'Manager view';
 
-  const ROWS: { icon: string; label: string; go?: string; hint?: string }[] = canManage
+  const managerRows = kind === 'hr'
     ? [
+        { icon: '📨', label: 'Requests', go: 'Requests', hint: 'Process requests' },
+        { icon: '👥', label: 'People', go: 'People' },
+        { icon: '📊', label: 'Org Insights', go: 'Insights' },
+      ]
+    : [
         { icon: '✅', label: 'Approvals', go: 'Approvals', hint: 'Review requests' },
         { icon: '👥', label: 'My Team', go: 'Team' },
         { icon: '📈', label: 'Team Insights', go: 'Insights' },
+      ];
+
+  const ROWS: { icon: string; label: string; go?: string; hint?: string }[] = canManage
+    ? [
+        ...managerRows,
         { icon: '💳', label: 'My Payslip', go: 'Payroll' },
         { icon: '⏱️', label: 'My Timesheet', go: 'Timesheet' },
       ]
@@ -52,8 +64,8 @@ export default function ProfileScreen({ navigation }: any) {
         {canManage && (
           <View style={st.switchCard}>
             <View style={{ flex: 1 }}>
-              <Text style={st.switchTitle}>Manager view</Text>
-              <Text style={st.switchSub}>Toggle between your team dashboard and your personal employee view.</Text>
+              <Text style={st.switchTitle}>{viewLabel}</Text>
+              <Text style={st.switchSub}>Toggle between your {kind === 'hr' ? 'organization' : 'team'} dashboard and your personal employee view.</Text>
             </View>
             <Switch
               value={viewMode === 'manager'}
