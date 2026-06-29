@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Dimensions,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { toggleViewMode } from '../../store/slices/authSlice';
+import { fetchNotifications } from '../../store/slices/notificationsSlice';
 import { initialsOf, avatarColor, PRESENCE_META } from '../../data/managerData';
 import {
   T, HR_PEOPLE, HR_KIND_META, TINT, NEW_JOINERS, CELEBRATIONS,
@@ -24,6 +25,9 @@ export default function HRDashboardScreen({ navigation }: any) {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((s: RootState) => s.auth);
   const requests = useSelector((s: RootState) => s.hrRequests.items);
+  const unread = useSelector((s: RootState) => s.notifications.items.filter((i) => !i.read).length);
+
+  useEffect(() => { dispatch(fetchNotifications()); }, [dispatch]);
 
   const name = (user?.email?.split('@')[0] || 'HR').replace(/\./g, ' ');
   const pending = requests.filter((r) => r.status === 'pending');
@@ -49,9 +53,9 @@ export default function HRDashboardScreen({ navigation }: any) {
             <Text style={st.hName}>{name} · People Team</Text>
           </View>
           <View style={st.headerRight}>
-            <TouchableOpacity style={st.bell}>
+            <TouchableOpacity style={st.bell} onPress={() => navigation?.navigate('Notifications')}>
               <Text style={{ fontSize: 16 }}>🔔</Text>
-              {pending.length > 0 && <View style={st.bellDot} />}
+              {unread > 0 && <View style={st.bellDot} />}
             </TouchableOpacity>
             <View style={[st.avatar, { backgroundColor: T.primary }]}>
               <Text style={st.avatarTx}>{initialsOf(name)}</Text>

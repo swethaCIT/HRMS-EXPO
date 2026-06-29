@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,9 @@ import {
   StatusBar,
   Dimensions,
 } from 'react-native';
-import { useSelector } from 'react-redux';
-import { RootState } from '../../store';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState, AppDispatch } from '../../store';
+import { fetchNotifications } from '../../store/slices/notificationsSlice';
 
 const { width } = Dimensions.get('window');
 
@@ -37,6 +38,9 @@ function formatCardDate() {
 
 export default function DashboardScreen({ navigation }: any) {
   const { user } = useSelector((state: RootState) => state.auth);
+  const dispatch = useDispatch<AppDispatch>();
+  const unread = useSelector((s: RootState) => s.notifications.items.filter((i) => !i.read).length);
+  useEffect(() => { dispatch(fetchNotifications()); }, [dispatch]);
   const initials = user?.email
     ? (user.email.split('@')[0].substring(0, 2)).toUpperCase()
     : 'JD';
@@ -52,9 +56,9 @@ export default function DashboardScreen({ navigation }: any) {
           <Text style={styles.headerGreeting}>{getGreeting()} 👋</Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.bellWrap}>
+          <TouchableOpacity style={styles.bellWrap} onPress={() => navigation?.navigate('Notifications')}>
             <Text style={styles.bellEmoji}>🔔</Text>
-            <View style={styles.bellDot} />
+            {unread > 0 && <View style={styles.bellDot} />}
           </TouchableOpacity>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>

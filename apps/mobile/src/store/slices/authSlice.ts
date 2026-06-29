@@ -15,9 +15,10 @@ export function roleFromEmail(email: string): User['role'] {
 export const MANAGER_ROLES: User['role'][] = ['admin', 'hr', 'manager'];
 export const isManagerRole = (role?: User['role']) => !!role && MANAGER_ROLES.includes(role);
 
-/** Which management experience a role gets: HR/admin → org-wide HR, manager → team. */
-export const managementKind = (role?: User['role']): 'hr' | 'manager' | null => {
-  if (role === 'hr' || role === 'admin') return 'hr';
+/** Which management experience a role gets. */
+export const managementKind = (role?: User['role']): 'admin' | 'hr' | 'manager' | null => {
+  if (role === 'admin') return 'admin';
+  if (role === 'hr') return 'hr';
   if (role === 'manager') return 'manager';
   return null;
 };

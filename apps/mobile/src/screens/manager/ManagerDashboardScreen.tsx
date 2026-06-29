@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Dimensions,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { toggleViewMode } from '../../store/slices/authSlice';
+import { fetchNotifications } from '../../store/slices/notificationsSlice';
 import {
   T, TEAM, PRESENCE_META, KIND_META, TINT, initialsOf, avatarColor,
 } from '../../data/managerData';
@@ -23,6 +24,9 @@ export default function ManagerDashboardScreen({ navigation }: any) {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((s: RootState) => s.auth);
   const approvals = useSelector((s: RootState) => s.approvals.items);
+  const unread = useSelector((s: RootState) => s.notifications.items.filter((i) => !i.read).length);
+
+  useEffect(() => { dispatch(fetchNotifications()); }, [dispatch]);
 
   const name = (user?.email?.split('@')[0] || 'Manager').replace(/\./g, ' ');
   const initials = initialsOf(name);
@@ -53,9 +57,9 @@ export default function ManagerDashboardScreen({ navigation }: any) {
             <Text style={st.hName}>{name}</Text>
           </View>
           <View style={st.headerRight}>
-            <TouchableOpacity style={st.bell}>
+            <TouchableOpacity style={st.bell} onPress={() => navigation?.navigate('Notifications')}>
               <Text style={{ fontSize: 16 }}>🔔</Text>
-              {pending.length > 0 && <View style={st.bellDot} />}
+              {unread > 0 && <View style={st.bellDot} />}
             </TouchableOpacity>
             <View style={[st.avatar, { backgroundColor: T.primary }]}>
               <Text style={st.avatarTx}>{initials}</Text>

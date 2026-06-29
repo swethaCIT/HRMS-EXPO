@@ -53,4 +53,24 @@ export const payrollApi = {
   getAll: () => api.get('/payroll'),
 };
 
+export const leaveApprovalApi = {
+  approve: (id: string) => api.patch(`/leaves/${id}/approve`),
+  reject: (id: string) => api.patch(`/leaves/${id}/reject`),
+};
+
+export const notificationApi = {
+  getMine: () => api.get('/notifications'),
+  unreadCount: () => api.get('/notifications/unread-count'),
+  markRead: (id: string) => api.patch(`/notifications/${id}/read`),
+  markAllRead: () => api.patch('/notifications/read-all'),
+};
+
+// Admin user management
+export const userApi = {
+  getAll: () => api.get('/users'),
+  setRole: (id: string, role: string) => api.patch(`/users/${id}`, { role }),
+  setActive: (id: string, isActive: boolean) => api.patch(`/users/${id}`, { isActive }),
+  remove: (id: string) => api.delete(`/users/${id}`),
+};
+
 export default api;

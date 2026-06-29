@@ -1,21 +1,49 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput,
 } from 'react-native';
-import { PRESENCE_META, initialsOf, avatarColor } from '../../data/managerData';
+import { PRESENCE_META, initialsOf, avatarColor, TeamMember } from '../../data/managerData';
 import { T, HR_PEOPLE } from '../../data/hrData';
+import { employeeApi } from '../../services/api';
 
 export default function PeopleScreen({ navigation }: any) {
   const [q, setQ] = useState('');
   const [dept, setDept] = useState<'All' | string>('All');
+  const [people, setPeople] = useState<TeamMember[]>(HR_PEOPLE);
+  const [live, setLive] = useState(false);
+
+  // Pull the real employee directory from Supabase; fall back to mock offline.
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await employeeApi.getAll();
+        if (Array.isArray(data) && data.length) {
+          const mapped: TeamMember[] = data.map((e: any) => ({
+            id: e.id,
+            employeeId: e.employeeId,
+            name: `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim() || (e.user?.email ?? 'Employee'),
+            designation: e.designation || '—',
+            department: e.department || 'General',
+            email: e.user?.email || '',
+            phone: e.phone || '',
+            presence: 'in',
+            checkIn: '09:00 AM',
+            attendancePct: 95, leaveBalance: 12, utilization: 80, performance: 85, pending: 0, projects: [],
+          }));
+          setPeople(mapped);
+          setLive(true);
+        }
+      } catch { /* keep mock fallback */ }
+    })();
+  }, []);
 
   const departments = useMemo(
-    () => ['All', ...Array.from(new Set(HR_PEOPLE.map((p) => p.department)))],
-    [],
+    () => ['All', ...Array.from(new Set(people.map((p) => p.department)))],
+    [people],
   );
 
   const list = useMemo(() => {
-    return HR_PEOPLE.filter((p) => {
+    return people.filter((p) => {
       const matchDept = dept === 'All' || p.department === dept;
       const matchQ =
         !q ||
@@ -31,7 +59,7 @@ export default function PeopleScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor={T.header} />
       <View style={st.header}>
         <Text style={st.hTitle}>People</Text>
-        <Text style={st.hSub}>{HR_PEOPLE.length} employees · {departments.length - 1} departments</Text>
+        <Text style={st.hSub}>{people.length} employees · {departments.length - 1} departments{live ? ' · live' : ''}</Text>
         <View style={st.searchBox}>
           <Text style={{ fontSize: 15 }}>🔍</Text>
           <TextInput

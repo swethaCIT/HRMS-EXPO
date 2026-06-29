@@ -29,6 +29,10 @@ import PeopleScreen      from '../screens/hr/PeopleScreen';
 import RequestsScreen    from '../screens/hr/RequestsScreen';
 import HRInsightsScreen  from '../screens/hr/HRInsightsScreen';
 
+import AdminDashboardScreen  from '../screens/admin/AdminDashboardScreen';
+import UserManagementScreen  from '../screens/admin/UserManagementScreen';
+import NotificationsScreen   from '../screens/common/NotificationsScreen';
+
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
 
@@ -36,6 +40,7 @@ const Tab   = createBottomTabNavigator();
 const EMP_ICONS: Record<string, string> = { Home: '🏠', Tickets: '🎫', Leave: '📋', Profile: '👤' };
 const MGR_ICONS: Record<string, string> = { Home: '🏠', Approvals: '✅', Team: '👥', Insights: '📈', Profile: '👤' };
 const HR_ICONS: Record<string, string>  = { Home: '🏠', Requests: '📨', People: '👥', Insights: '📊', Profile: '👤' };
+const ADMIN_ICONS: Record<string, string> = { Home: '🏠', Users: '👤', People: '🏢', Insights: '📊', Profile: '👤' };
 
 function TabIcon({ name, focused, icons, badge }: { name: string; focused: boolean; icons: Record<string, string>; badge?: number }) {
   return (
@@ -132,12 +137,36 @@ function HRTabs() {
   );
 }
 
+/* ── Admin tabs ── */
+function AdminTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        ...commonScreenOptions,
+        tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} icons={ADMIN_ICONS} />,
+      })}
+    >
+      <Tab.Screen name="Home"     component={AdminDashboardScreen} />
+      <Tab.Screen name="Users"    component={UserManagementScreen} />
+      <Tab.Screen name="People"   component={PeopleScreen} />
+      <Tab.Screen name="Insights" component={HRInsightsScreen} />
+      <Tab.Screen name="Profile"  component={ProfileScreen} />
+    </Tab.Navigator>
+  );
+}
+
 export default function AppNavigator() {
   const { token, user, viewMode } = useSelector((state: RootState) => state.auth);
   const inManagementView = isManagerRole(user?.role) && viewMode === 'manager';
-  const kind = managementKind(user?.role); // 'hr' | 'manager' | null
+  const kind = managementKind(user?.role); // 'admin' | 'hr' | 'manager' | null
 
-  const MainTabs = !inManagementView ? EmployeeTabs : kind === 'hr' ? HRTabs : ManagerTabs;
+  const MainTabs = !inManagementView
+    ? EmployeeTabs
+    : kind === 'admin'
+      ? AdminTabs
+      : kind === 'hr'
+        ? HRTabs
+        : ManagerTabs;
 
   return (
     <NavigationContainer>
@@ -159,6 +188,9 @@ export default function AppNavigator() {
             {/* HR stack screens (reachable from the HR dashboard) */}
             <Stack.Screen name="Requests"   component={RequestsScreen} />
             <Stack.Screen name="People"     component={PeopleScreen} />
+            {/* admin + shared */}
+            <Stack.Screen name="Users"         component={UserManagementScreen} />
+            <Stack.Screen name="Notifications" component={NotificationsScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />
