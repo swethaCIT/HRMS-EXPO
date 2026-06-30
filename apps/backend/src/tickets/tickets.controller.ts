@@ -3,11 +3,14 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { TicketsService } from './tickets.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '../users/entities/user.entity';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('tickets')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('tickets')
 export class TicketsController {
   constructor(private readonly ticketsService: TicketsService) {}
@@ -28,11 +31,13 @@ export class TicketsController {
   }
 
   @Patch(':id/approve')
+  @Roles(UserRole.MANAGER, UserRole.HR, UserRole.ADMIN)
   approve(@Param('id') id: string) {
     return this.ticketsService.approve(id);
   }
 
   @Patch(':id/reject')
+  @Roles(UserRole.MANAGER, UserRole.HR, UserRole.ADMIN)
   reject(@Param('id') id: string) {
     return this.ticketsService.reject(id);
   }

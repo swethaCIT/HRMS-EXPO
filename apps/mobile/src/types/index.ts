@@ -61,4 +61,6 @@ export interface AuthState {
   error: string | null;
   /** Which experience the signed-in user is currently viewing. */
   viewMode: 'manager' | 'employee';
+  /** True while restoring a saved session on app launch. */
+  booting: boolean;
 }

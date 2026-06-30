@@ -69,6 +69,20 @@ export const logout = createAsyncThunk('auth/logout', async () => {
   await AsyncStorage.removeItem('access_token');
 });
 
+/** Restore a saved session on app launch: read token → fetch /auth/me → hydrate. */
+export const restoreSession = createAsyncThunk('auth/restore', async (_, { rejectWithValue }) => {
+  const token = await AsyncStorage.getItem('access_token');
+  if (!token || token === 'demo-token') return rejectWithValue('no-session');
+  try {
+    const me = await authApi.me();
+    const user: User = { ...me.data.user, role: me.data.user?.role };
+    return { access_token: token, user, employee: me.data.employee ?? null };
+  } catch {
+    await AsyncStorage.removeItem('access_token');
+    return rejectWithValue('invalid-session');
+  }
+});
+
 const initialState: AuthState = {
   user: null,
   employee: null,
@@ -76,6 +90,7 @@ const initialState: AuthState = {
   isLoading: false,
   error: null,
   viewMode: 'employee',
+  booting: true,
 };
 
 const authSlice = createSlice({
@@ -109,6 +124,16 @@ const authSlice = createSlice({
         state.employee = null;
         state.token = null;
         state.viewMode = 'employee';
+      })
+      .addCase(restoreSession.fulfilled, (state, action) => {
+        state.booting = false;
+        state.token = action.payload.access_token;
+        state.user = action.payload.user as User;
+        state.employee = (action.payload as any).employee ?? null;
+        state.viewMode = defaultViewFor(action.payload.user?.role);
+      })
+      .addCase(restoreSession.rejected, (state) => {
+        state.booting = false;
       });
   },
 });

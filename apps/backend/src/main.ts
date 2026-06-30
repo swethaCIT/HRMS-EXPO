@@ -1,13 +1,20 @@
 import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe, ClassSerializerInterceptor } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.enableCors();
+  // Security headers
+  app.use(helmet());
+
+  // CORS — restrict to configured origins in prod; allow all when unset (dev).
+  const origins = (process.env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
+  app.enableCors({ origin: origins.length ? origins : true, credentials: true });
+
   app.setGlobalPrefix('api/v1');
 
   app.useGlobalPipes(

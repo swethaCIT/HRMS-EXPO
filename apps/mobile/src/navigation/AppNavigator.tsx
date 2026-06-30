@@ -1,11 +1,11 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useSelector } from 'react-redux';
-import { RootState } from '../store';
-import { isManagerRole, managementKind } from '../store/slices/authSlice';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState, AppDispatch } from '../store';
+import { isManagerRole, managementKind, restoreSession } from '../store/slices/authSlice';
 
 import LoginScreen      from '../screens/auth/LoginScreen';
 import DashboardScreen  from '../screens/dashboard/DashboardScreen';
@@ -33,8 +33,9 @@ import AdminDashboardScreen  from '../screens/admin/AdminDashboardScreen';
 import UserManagementScreen  from '../screens/admin/UserManagementScreen';
 import NotificationsScreen   from '../screens/common/NotificationsScreen';
 
-const Stack = createNativeStackNavigator();
-const Tab   = createBottomTabNavigator();
+const RootStack = createNativeStackNavigator();
+const Tab       = createBottomTabNavigator();
+const Inner     = createNativeStackNavigator();
 
 /* ── Tab icon maps ── */
 const EMP_ICONS: Record<string, string> = { Home: '🏠', Tickets: '🎫', Leave: '📋', Profile: '👤' };
@@ -55,6 +56,54 @@ function TabIcon({ name, focused, icons, badge }: { name: string; focused: boole
     </View>
   );
 }
+
+/* ── Leaf (pushed) screens shared by every tab so the bottom bar stays visible ── */
+const LEAF_SCREENS: [string, React.ComponentType<any>][] = [
+  ['Assets', AssetsScreen],
+  ['Payroll', PayrollScreen],
+  ['Timesheet', AttendanceScreen],
+  ['RaiseTicket', RaiseTicketScreen],
+  ['TicketDetail', TicketDetailScreen],
+  ['TeamMember', TeamMemberDetailScreen],
+  ['Notifications', NotificationsScreen],
+];
+
+/**
+ * Wrap a tab's main screen in a stack that also registers the leaf screens.
+ * Navigating to a leaf pushes WITHIN the tab → the bottom tab bar stays visible.
+ * Navigating to another tab's name bubbles up to the Tab navigator (also keeps the bar).
+ */
+function makeTabStack(Main: React.ComponentType<any>) {
+  return function TabStack() {
+    return (
+      <Inner.Navigator screenOptions={{ headerShown: false }}>
+        <Inner.Screen name="index" component={Main} />
+        {LEAF_SCREENS.map(([name, comp]) => (
+          <Inner.Screen key={name} name={name} component={comp} />
+        ))}
+      </Inner.Navigator>
+    );
+  };
+}
+
+/* Stable per-tab stack components (defined once at module scope) */
+const EmpHome   = makeTabStack(DashboardScreen);
+const EmpTickets = makeTabStack(TicketsScreen);
+const EmpLeave  = makeTabStack(LeavesScreen);
+const CommonProfile = makeTabStack(ProfileScreen);
+
+const MgrHome      = makeTabStack(ManagerDashboardScreen);
+const MgrApprovals = makeTabStack(ApprovalsScreen);
+const MgrTeam      = makeTabStack(TeamScreen);
+const MgrInsights  = makeTabStack(InsightsScreen);
+
+const HrHome     = makeTabStack(HRDashboardScreen);
+const HrRequests = makeTabStack(RequestsScreen);
+const HrPeople   = makeTabStack(PeopleScreen);
+const HrInsights = makeTabStack(HRInsightsScreen);
+
+const AdmHome  = makeTabStack(AdminDashboardScreen);
+const AdmUsers = makeTabStack(UserManagementScreen);
 
 const tabBarStyle = {
   backgroundColor: '#FFFFFF',
@@ -81,16 +130,11 @@ const commonScreenOptions = {
 /* ── Employee tabs ── */
 function EmployeeTabs() {
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        ...commonScreenOptions,
-        tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} icons={EMP_ICONS} />,
-      })}
-    >
-      <Tab.Screen name="Home"    component={DashboardScreen} />
-      <Tab.Screen name="Tickets" component={TicketsScreen} />
-      <Tab.Screen name="Leave"   component={LeavesScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+    <Tab.Navigator screenOptions={({ route }) => ({ ...commonScreenOptions, tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} icons={EMP_ICONS} /> })}>
+      <Tab.Screen name="Home"    component={EmpHome} />
+      <Tab.Screen name="Tickets" component={EmpTickets} />
+      <Tab.Screen name="Leave"   component={EmpLeave} />
+      <Tab.Screen name="Profile" component={CommonProfile} />
     </Tab.Navigator>
   );
 }
@@ -99,40 +143,26 @@ function EmployeeTabs() {
 function ManagerTabs() {
   const pending = useSelector((s: RootState) => s.approvals.items.filter((i) => i.status === 'pending').length);
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        ...commonScreenOptions,
-        tabBarIcon: ({ focused }) => (
-          <TabIcon name={route.name} focused={focused} icons={MGR_ICONS} badge={route.name === 'Approvals' ? pending : undefined} />
-        ),
-      })}
-    >
-      <Tab.Screen name="Home"      component={ManagerDashboardScreen} />
-      <Tab.Screen name="Approvals" component={ApprovalsScreen} />
-      <Tab.Screen name="Team"      component={TeamScreen} />
-      <Tab.Screen name="Insights"  component={InsightsScreen} />
-      <Tab.Screen name="Profile"   component={ProfileScreen} />
+    <Tab.Navigator screenOptions={({ route }) => ({ ...commonScreenOptions, tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} icons={MGR_ICONS} badge={route.name === 'Approvals' ? pending : undefined} /> })}>
+      <Tab.Screen name="Home"      component={MgrHome} />
+      <Tab.Screen name="Approvals" component={MgrApprovals} />
+      <Tab.Screen name="Team"      component={MgrTeam} />
+      <Tab.Screen name="Insights"  component={MgrInsights} />
+      <Tab.Screen name="Profile"   component={CommonProfile} />
     </Tab.Navigator>
   );
 }
 
-/* ── HR tabs (org-wide; also used by admin) ── */
+/* ── HR tabs ── */
 function HRTabs() {
   const pending = useSelector((s: RootState) => s.hrRequests.items.filter((i) => i.status === 'pending').length);
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        ...commonScreenOptions,
-        tabBarIcon: ({ focused }) => (
-          <TabIcon name={route.name} focused={focused} icons={HR_ICONS} badge={route.name === 'Requests' ? pending : undefined} />
-        ),
-      })}
-    >
-      <Tab.Screen name="Home"     component={HRDashboardScreen} />
-      <Tab.Screen name="Requests" component={RequestsScreen} />
-      <Tab.Screen name="People"   component={PeopleScreen} />
-      <Tab.Screen name="Insights" component={HRInsightsScreen} />
-      <Tab.Screen name="Profile"  component={ProfileScreen} />
+    <Tab.Navigator screenOptions={({ route }) => ({ ...commonScreenOptions, tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} icons={HR_ICONS} badge={route.name === 'Requests' ? pending : undefined} /> })}>
+      <Tab.Screen name="Home"     component={HrHome} />
+      <Tab.Screen name="Requests" component={HrRequests} />
+      <Tab.Screen name="People"   component={HrPeople} />
+      <Tab.Screen name="Insights" component={HrInsights} />
+      <Tab.Screen name="Profile"  component={CommonProfile} />
     </Tab.Navigator>
   );
 }
@@ -140,23 +170,32 @@ function HRTabs() {
 /* ── Admin tabs ── */
 function AdminTabs() {
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        ...commonScreenOptions,
-        tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} icons={ADMIN_ICONS} />,
-      })}
-    >
-      <Tab.Screen name="Home"     component={AdminDashboardScreen} />
-      <Tab.Screen name="Users"    component={UserManagementScreen} />
-      <Tab.Screen name="People"   component={PeopleScreen} />
-      <Tab.Screen name="Insights" component={HRInsightsScreen} />
-      <Tab.Screen name="Profile"  component={ProfileScreen} />
+    <Tab.Navigator screenOptions={({ route }) => ({ ...commonScreenOptions, tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} icons={ADMIN_ICONS} /> })}>
+      <Tab.Screen name="Home"     component={AdmHome} />
+      <Tab.Screen name="Users"    component={AdmUsers} />
+      <Tab.Screen name="People"   component={HrPeople} />
+      <Tab.Screen name="Insights" component={HrInsights} />
+      <Tab.Screen name="Profile"  component={CommonProfile} />
     </Tab.Navigator>
   );
 }
 
 export default function AppNavigator() {
-  const { token, user, viewMode } = useSelector((state: RootState) => state.auth);
+  const dispatch = useDispatch<AppDispatch>();
+  const { token, user, viewMode, booting } = useSelector((state: RootState) => state.auth);
+
+  // Restore a saved session on launch (persistent login).
+  useEffect(() => { dispatch(restoreSession()); }, [dispatch]);
+
+  if (booting && !token) {
+    return (
+      <View style={splash.root}>
+        <Text style={splash.logo}>HRMS</Text>
+        <ActivityIndicator color="#FFFFFF" style={{ marginTop: 16 }} />
+      </View>
+    );
+  }
+
   const inManagementView = isManagerRole(user?.role) && viewMode === 'manager';
   const kind = managementKind(user?.role); // 'admin' | 'hr' | 'manager' | null
 
@@ -170,35 +209,21 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <RootStack.Navigator screenOptions={{ headerShown: false }}>
         {token ? (
-          <>
-            <Stack.Screen name="Main" component={MainTabs} />
-            {/* shared employee stack screens */}
-            <Stack.Screen name="Assets"       component={AssetsScreen} />
-            <Stack.Screen name="Payroll"      component={PayrollScreen} />
-            <Stack.Screen name="Timesheet"    component={AttendanceScreen} />
-            <Stack.Screen name="RaiseTicket"  component={RaiseTicketScreen} />
-            <Stack.Screen name="TicketDetail" component={TicketDetailScreen} />
-            {/* manager stack screens (reachable from the manager dashboard) */}
-            <Stack.Screen name="Approvals"  component={ApprovalsScreen} />
-            <Stack.Screen name="Team"       component={TeamScreen} />
-            <Stack.Screen name="Insights"   component={InsightsScreen} />
-            <Stack.Screen name="TeamMember" component={TeamMemberDetailScreen} />
-            {/* HR stack screens (reachable from the HR dashboard) */}
-            <Stack.Screen name="Requests"   component={RequestsScreen} />
-            <Stack.Screen name="People"     component={PeopleScreen} />
-            {/* admin + shared */}
-            <Stack.Screen name="Users"         component={UserManagementScreen} />
-            <Stack.Screen name="Notifications" component={NotificationsScreen} />
-          </>
+          <RootStack.Screen name="Main" component={MainTabs} />
         ) : (
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <RootStack.Screen name="Login" component={LoginScreen} />
         )}
-      </Stack.Navigator>
+      </RootStack.Navigator>
     </NavigationContainer>
   );
 }
+
+const splash = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#1E1B4B', alignItems: 'center', justifyContent: 'center' },
+  logo: { color: '#FFFFFF', fontSize: 34, fontWeight: '800', letterSpacing: 2 },
+});
 
 const tabStyles = StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'center', width: 36, height: 28 },

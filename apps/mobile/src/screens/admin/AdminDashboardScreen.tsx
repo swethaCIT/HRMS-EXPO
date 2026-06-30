@@ -56,7 +56,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
               <Text style={{ fontSize: 16 }}>🔔</Text>
               {unread > 0 && <View style={st.bellDot} />}
             </TouchableOpacity>
-            <View style={[st.avatar, { backgroundColor: T.primary }]}><Text style={st.avatarTx}>{initialsOf(name)}</Text></View>
+            <TouchableOpacity style={[st.avatar, { backgroundColor: T.primary }]} onPress={() => navigation?.navigate('Profile')} activeOpacity={0.8}><Text style={st.avatarTx}>{initialsOf(name)}</Text></TouchableOpacity>
           </View>
         </View>
         <TouchableOpacity style={st.switchPill} activeOpacity={0.8} onPress={() => dispatch(toggleViewMode())}>

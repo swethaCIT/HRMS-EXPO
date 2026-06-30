@@ -60,9 +60,9 @@ export default function DashboardScreen({ navigation }: any) {
             <Text style={styles.bellEmoji}>🔔</Text>
             {unread > 0 && <View style={styles.bellDot} />}
           </TouchableOpacity>
-          <View style={styles.avatar}>
+          <TouchableOpacity style={styles.avatar} onPress={() => navigation?.navigate('Profile')} activeOpacity={0.8}>
             <Text style={styles.avatarText}>{initials}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
       </View>
 

@@ -58,9 +58,9 @@ export default function HRDashboardScreen({ navigation }: any) {
               <Text style={{ fontSize: 16 }}>🔔</Text>
               {unread > 0 && <View style={st.bellDot} />}
             </TouchableOpacity>
-            <View style={[st.avatar, { backgroundColor: T.primary }]}>
+            <TouchableOpacity style={[st.avatar, { backgroundColor: T.primary }]} onPress={() => navigation?.navigate('Profile')} activeOpacity={0.8}>
               <Text style={st.avatarTx}>{initialsOf(name)}</Text>
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
 

@@ -2,11 +2,14 @@ import { Controller, Get, Post, Patch, Param, Body, UseGuards } from '@nestjs/co
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { RequestsService } from './requests.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '../users/entities/user.entity';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('requests')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('requests')
 export class RequestsController {
   constructor(private readonly requestsService: RequestsService) {}
@@ -27,11 +30,13 @@ export class RequestsController {
   }
 
   @Patch(':id/issue')
+  @Roles(UserRole.HR, UserRole.ADMIN)
   issue(@Param('id') id: string) {
     return this.requestsService.issue(id);
   }
 
   @Patch(':id/reject')
+  @Roles(UserRole.HR, UserRole.ADMIN)
   reject(@Param('id') id: string) {
     return this.requestsService.reject(id);
   }
