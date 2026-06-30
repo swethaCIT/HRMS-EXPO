@@ -23,6 +23,8 @@ import { Leave, LeaveType, LeaveStatus } from './leaves/entities/leave.entity';
 import { Payroll, PayrollStatus } from './payroll/entities/payroll.entity';
 import { Notification, NotificationType } from './notifications/entities/notification.entity';
 import { Ticket } from './tickets/entities/ticket.entity';
+import { Asset } from './assets/entities/asset.entity';
+import { Request } from './requests/entities/request.entity';
 
 dotenv.config();
 
@@ -86,12 +88,12 @@ async function main() {
     type: 'postgres',
     url,
     ssl: { rejectUnauthorized: false },
-    entities: [User, Employee, Attendance, Leave, Payroll, Notification, Ticket],
+    entities: [User, Employee, Attendance, Leave, Payroll, Notification, Ticket, Asset, Request],
     synchronize: true,
   });
 
   await ds.initialize();
-  console.log('✅ Connected + schema synced (users, employees, attendance, leaves, payrolls, notifications, tickets)');
+  console.log('✅ Connected + schema synced (incl. tickets, assets, requests)');
 
   const userRepo = ds.getRepository(User);
   const employeeRepo = ds.getRepository(Employee);
@@ -100,6 +102,8 @@ async function main() {
   const payrollRepo = ds.getRepository(Payroll);
   const notificationRepo = ds.getRepository(Notification);
   const ticketRepo = ds.getRepository(Ticket);
+  const assetRepo = ds.getRepository(Asset);
+  const requestRepo = ds.getRepository(Request);
 
   const hashed = await bcrypt.hash(PASSWORD, 10);
 
@@ -151,7 +155,19 @@ async function main() {
         basicSalary: 60000, allowances: 15000, deductions: 5000, tax: 8000, netSalary: 62000,
         status: PayrollStatus.PAID, paymentDate: new Date('2026-06-30'),
       }));
+
       console.log(`   ↳ employee ${p.employeeId} + attendance/leave/payroll`);
+    }
+
+    // assets (idempotent — also seeds for pre-existing employees)
+    if (emp && (await assetRepo.count({ where: { employeeId: emp.id } })) === 0) {
+      const tag = p.employeeId.slice(-2);
+      await assetRepo.save([
+        assetRepo.create({ employeeId: emp.id, assetTag: `LAP-20${tag}`, name: 'MacBook Pro 14"', category: 'Laptop', serialNumber: `C02${p.employeeId}X`, condition: 'Good', status: 'assigned', assignedDate: new Date('2024-01-16') }),
+        assetRepo.create({ employeeId: emp.id, assetTag: `MON-30${tag}`, name: 'Dell 27" Monitor', category: 'Monitor', serialNumber: `DM${p.employeeId}`, condition: 'Good', status: 'assigned', assignedDate: new Date('2024-01-16') }),
+        assetRepo.create({ employeeId: emp.id, assetTag: `PHN-10${tag}`, name: 'iPhone 14', category: 'Phone', serialNumber: `IP${p.employeeId}`, condition: 'Fair', status: 'assigned', assignedDate: new Date('2024-02-01') }),
+      ]);
+      console.log(`   ↳ 3 assets for ${p.employeeId}`);
     }
 
     // notifications (only seed if this user has none yet)
@@ -184,6 +200,35 @@ async function main() {
         console.log('   ↳ 2 tickets');
       }
     }
+  }
+
+  // HR document/profile/onboarding requests (created by the employee user)
+  const empUser = await userRepo.findOne({ where: { email: 'employee@hrms.com' } });
+  if (empUser && (await requestRepo.count()) === 0) {
+    await requestRepo.save([
+      requestRepo.create({
+        kind: 'document', title: 'Experience Letter', subtitle: 'For home loan application', meta: 'EXP',
+        employeeName: 'Rahul Verma', employeeId: 'EMP004', department: 'Engineering',
+        reason: 'Bank requires an experience letter for loan processing.',
+        detail: [{ k: 'Document', v: 'Experience Letter' }, { k: 'Purpose', v: 'Home loan' }, { k: 'Tenure', v: '2 yr 3 mo' }],
+        status: 'pending', createdById: empUser.id,
+      }),
+      requestRepo.create({
+        kind: 'profile', title: 'Bank Account Update', subtitle: 'New salary account', meta: 'BANK',
+        employeeName: 'Rahul Verma', employeeId: 'EMP004', department: 'Engineering',
+        reason: 'Switched banks, please update for next payroll run.',
+        detail: [{ k: 'Field', v: 'Bank account' }, { k: 'New bank', v: 'HDFC ••• 4821' }],
+        status: 'pending', createdById: empUser.id,
+      }),
+      requestRepo.create({
+        kind: 'onboarding', title: 'Day-1 Onboarding', subtitle: 'Pending document verification', meta: 'NEW',
+        employeeName: 'Joseph Paul', employeeId: 'EMP012', department: 'People',
+        reason: 'New joiner — verify ID proofs and issue assets.',
+        detail: [{ k: 'Stage', v: 'Document verification' }, { k: 'Joined', v: '26 Jun 2026' }],
+        status: 'pending', createdById: empUser.id,
+      }),
+    ]);
+    console.log('✅ 3 HR requests');
   }
 
   await ds.destroy();
