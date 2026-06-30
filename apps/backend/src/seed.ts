@@ -22,6 +22,7 @@ import { Attendance, AttendanceStatus } from './attendance/entities/attendance.e
 import { Leave, LeaveType, LeaveStatus } from './leaves/entities/leave.entity';
 import { Payroll, PayrollStatus } from './payroll/entities/payroll.entity';
 import { Notification, NotificationType } from './notifications/entities/notification.entity';
+import { Ticket } from './tickets/entities/ticket.entity';
 
 dotenv.config();
 
@@ -85,12 +86,12 @@ async function main() {
     type: 'postgres',
     url,
     ssl: { rejectUnauthorized: false },
-    entities: [User, Employee, Attendance, Leave, Payroll, Notification],
+    entities: [User, Employee, Attendance, Leave, Payroll, Notification, Ticket],
     synchronize: true,
   });
 
   await ds.initialize();
-  console.log('✅ Connected + schema synced (users, employees, attendance, leaves, payrolls, notifications)');
+  console.log('✅ Connected + schema synced (users, employees, attendance, leaves, payrolls, notifications, tickets)');
 
   const userRepo = ds.getRepository(User);
   const employeeRepo = ds.getRepository(Employee);
@@ -98,6 +99,7 @@ async function main() {
   const leaveRepo = ds.getRepository(Leave);
   const payrollRepo = ds.getRepository(Payroll);
   const notificationRepo = ds.getRepository(Notification);
+  const ticketRepo = ds.getRepository(Ticket);
 
   const hashed = await bcrypt.hash(PASSWORD, 10);
 
@@ -159,6 +161,28 @@ async function main() {
         await notificationRepo.save(notificationRepo.create({ userId: user.id, title: n.title, body: n.body, type: n.type }));
       }
       console.log(`   ↳ ${p.notifications.length} notifications`);
+    }
+
+    // a couple of tickets for the employee user
+    if (p.role === UserRole.EMPLOYEE) {
+      const existingTickets = await ticketRepo.count({ where: { createdById: user.id } });
+      if (existingTickets === 0) {
+        await ticketRepo.save(ticketRepo.create({
+          ticketId: 'TKT-1043', subject: 'Laptop not powering on after update',
+          dept: 'IT', category: 'Hardware', subCategory: 'Laptop Issue',
+          priority: 'High', status: 'In Progress', approval: 'Approved',
+          description: 'Laptop does not power on after the latest Windows update.',
+          agent: 'IT Helpdesk', createdById: user.id,
+        }));
+        await ticketRepo.save(ticketRepo.create({
+          ticketId: 'TKT-1039', subject: 'Form 16 for FY 2025-26 not available',
+          dept: 'HR', category: 'Payroll & Benefits', subCategory: 'Form 16',
+          priority: 'Medium', status: 'Open', approval: 'Pending',
+          description: 'Form 16 is not showing up in the payroll portal.',
+          createdById: user.id,
+        }));
+        console.log('   ↳ 2 tickets');
+      }
     }
   }
 

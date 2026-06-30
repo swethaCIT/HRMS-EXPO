@@ -10,6 +10,7 @@ import { LeavesModule } from './leaves/leaves.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { StorageModule } from './storage/storage.module';
+import { TicketsModule } from './tickets/tickets.module';
 import { getDatabaseConfig } from './config/database.config';
 
 @Module({
@@ -39,6 +40,7 @@ import { getDatabaseConfig } from './config/database.config';
     PayrollModule,
     NotificationsModule,
     StorageModule,
+    TicketsModule,
   ],
 })
 export class AppModule {}
