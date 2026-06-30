@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, LayoutAnimation, Platform, UIManager,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
-import { issue, rejectRequest, issueAllPending } from '../../store/slices/hrRequestsSlice';
+import { issue, rejectRequest, issueAllPending, fetchHRRequests } from '../../store/slices/hrRequestsSlice';
 import { initialsOf, avatarColor } from '../../data/managerData';
 import { T, HR_KIND_META, TINT, HRRequestStatus } from '../../data/hrData';
 
@@ -24,6 +24,8 @@ export default function RequestsScreen({ navigation }: any) {
   const items = useSelector((s: RootState) => s.hrRequests.items);
   const [tab, setTab] = useState<Tab>('pending');
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  useEffect(() => { dispatch(fetchHRRequests()); }, [dispatch]);
 
   const counts: Record<Tab, number> = {
     pending: items.filter((i) => i.status === 'pending').length,

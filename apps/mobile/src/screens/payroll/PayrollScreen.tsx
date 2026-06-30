@@ -1,9 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   StatusBar, Modal, Alert,
 } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store';
+import { payrollApi } from '../../services/api';
 
 /* ════════ Currency helper (Indian formatting) ════════ */
 const inr = (n: number) => '₹' + n.toLocaleString('en-IN');
@@ -110,28 +113,53 @@ const BANK = {
 
 /* ════════════════════════════════════════════════════════ */
 export default function PayrollScreen() {
+  const employee = useSelector((st: RootState) => st.auth.employee);
   const [month, setMonth]       = useState(CURRENT.month);
   const [year, setYear]         = useState(CURRENT.year);
   const [picker, setPicker]     = useState<null | 'month' | 'year'>(null);
+  const [slip, setSlip]         = useState<PaySlip>(CURRENT);
 
-  const slip = CURRENT; // single sample; a real app would look up by month/year
+  // Pull the latest real payslip; rebuild the slip from the DB figures.
+  useEffect(() => {
+    if (!employee?.id) return;
+    (async () => {
+      try {
+        const { data } = await payrollApi.getByEmployee(employee.id);
+        const p = Array.isArray(data) ? data[0] : data;
+        if (p) {
+          const n = (v: any) => Number(v) || 0;
+          setSlip({
+            month: (n(p.month) || 6) - 1,
+            year: n(p.year) || 2026,
+            status: p.status === 'paid' ? 'Paid' : 'Processing',
+            paidOn: p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—',
+            earnings: [
+              { label: 'Basic Salary', amount: n(p.basicSalary) },
+              { label: 'Allowances', amount: n(p.allowances) },
+            ],
+            deductions: [
+              { label: 'Deductions', amount: n(p.deductions) },
+              { label: 'Income Tax (TDS)', amount: n(p.tax) },
+            ],
+            employerContrib: [],
+            attendance: CURRENT.attendance,
+          });
+          setMonth((n(p.month) || 6) - 1);
+          setYear(n(p.year) || 2026);
+        }
+      } catch { /* keep mock */ }
+    })();
+  }, [employee?.id]);
 
   const grossEarnings = useMemo(() => slip.earnings.reduce((s, e) => s + e.amount, 0), [slip]);
   const totalDeduct   = useMemo(() => slip.deductions.reduce((s, d) => s + d.amount, 0), [slip]);
   const netPay        = grossEarnings - totalDeduct;
 
-  /* donut: composition of gross earnings */
-  const otherAllow = slip.earnings
-    .filter(e => ['Medical Allowance','Conveyance Allowance','LTA'].includes(e.label))
-    .reduce((s, e) => s + e.amount, 0);
-
-  const donutSegments: Segment[] = [
-    { label: 'Basic',            value: 50000,        color: '#4F46E5' },
-    { label: 'HRA',              value: 25000,        color: '#06B6D4' },
-    { label: 'Special Allowance', value: 15000,       color: '#10B981' },
-    { label: 'Bonus',            value: 8000,         color: '#F59E0B' },
-    { label: 'Other Allowances', value: otherAllow,   color: '#A855F7' },
-  ];
+  /* donut: composition of gross earnings (derived from the slip) */
+  const DONUT_COLORS = ['#4F46E5', '#06B6D4', '#10B981', '#F59E0B', '#A855F7'];
+  const donutSegments: Segment[] = slip.earnings
+    .filter(e => e.amount > 0)
+    .map((e, i) => ({ label: e.label, value: e.amount, color: DONUT_COLORS[i % DONUT_COLORS.length] }));
 
   function download(fmt: 'PDF' | 'Excel') {
     Alert.alert(

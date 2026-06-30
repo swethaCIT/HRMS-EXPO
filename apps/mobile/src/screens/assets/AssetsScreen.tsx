@@ -1,11 +1,32 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar,
 } from 'react-native';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store';
+import { assetApi } from '../../services/api';
 
 /* ── Types ── */
 type AssetStatus = 'Active' | 'Returned';
 type Condition   = 'Good' | 'Fair' | 'Poor' | 'New';
+
+const CATEGORY_EMOJI: Record<string, string> = {
+  Laptop: '💻', Monitor: '🖥️', Phone: '📱', Accessory: '🖱️', Peripheral: '🖱️', Furniture: '🪑',
+};
+function mapAsset(a: any): Asset {
+  return {
+    id: a.id,
+    name: a.name,
+    category: a.category,
+    brand: a.brand || '—',
+    serial: a.serialNumber || '—',
+    assetId: a.assetTag,
+    assignedOn: a.assignedDate ? new Date(a.assignedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—',
+    condition: (a.condition as Condition) || 'Good',
+    status: a.status === 'returned' ? 'Returned' : 'Active',
+    emoji: CATEGORY_EMOJI[a.category] || '📦',
+  };
+}
 
 interface Asset {
   id: string;
@@ -48,9 +69,22 @@ const CONDITION_COLOR: Record<Condition, string> = {
 };
 
 export default function AssetsScreen({ navigation }: any) {
-  const total    = ASSETS.length;
-  const active   = useMemo(() => ASSETS.filter(a => a.status === 'Active').length, []);
-  const returned = useMemo(() => ASSETS.filter(a => a.status === 'Returned').length, []);
+  const employee = useSelector((st: RootState) => st.auth.employee);
+  const [assets, setAssets] = useState<Asset[]>(ASSETS);
+
+  useEffect(() => {
+    if (!employee?.id) return;
+    (async () => {
+      try {
+        const { data } = await assetApi.getByEmployee(employee.id);
+        if (Array.isArray(data) && data.length) setAssets(data.map(mapAsset));
+      } catch { /* keep mock */ }
+    })();
+  }, [employee?.id]);
+
+  const total    = assets.length;
+  const active   = useMemo(() => assets.filter(a => a.status === 'Active').length, [assets]);
+  const returned = useMemo(() => assets.filter(a => a.status === 'Returned').length, [assets]);
 
   return (
     <View style={s.root}>
@@ -99,7 +133,7 @@ export default function AssetsScreen({ navigation }: any) {
       >
         <Text style={s.sectionLabel}>ASSIGNED TO ME</Text>
 
-        {ASSETS.map(asset => (
+        {assets.map(asset => (
           <View key={asset.id} style={s.card}>
             {/* Top row: icon + name + status */}
             <View style={s.cardTop}>

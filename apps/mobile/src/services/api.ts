@@ -75,6 +75,20 @@ export const notificationApi = {
   markAllRead: () => api.patch('/notifications/read-all'),
 };
 
+export const assetApi = {
+  getByEmployee: (employeeId: string) => api.get(`/assets/employee/${employeeId}`),
+  getAll: () => api.get('/assets'),
+  returnAsset: (id: string) => api.patch(`/assets/${id}/return`),
+};
+
+export const requestApi = {
+  getAll: () => api.get('/requests'),
+  getMine: () => api.get('/requests/mine'),
+  create: (data: any) => api.post('/requests', data),
+  issue: (id: string) => api.patch(`/requests/${id}/issue`),
+  reject: (id: string) => api.patch(`/requests/${id}/reject`),
+};
+
 // Admin user management
 export const userApi = {
   getAll: () => api.get('/users'),

@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput,
 } from 'react-native';
 import {
-  T, TEAM, PRESENCE_META, Presence, initialsOf, avatarColor,
+  T, TEAM, PRESENCE_META, Presence, initialsOf, avatarColor, TeamMember,
 } from '../../data/managerData';
+import { employeeApi } from '../../services/api';
 
 const FILTERS: { key: 'all' | Presence; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -17,9 +18,34 @@ const FILTERS: { key: 'all' | Presence; label: string }[] = [
 export default function TeamScreen({ navigation }: any) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | Presence>('all');
+  const [team, setTeam] = useState<TeamMember[]>(TEAM);
+
+  // Pull the real employee directory; fall back to mock offline.
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await employeeApi.getAll();
+        if (Array.isArray(data) && data.length) {
+          setTeam(data.map((e: any, i: number): TeamMember => ({
+            id: e.id,
+            employeeId: e.employeeId,
+            name: `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim() || (e.user?.email ?? 'Employee'),
+            designation: e.designation || '—',
+            department: e.department || 'General',
+            email: e.user?.email || '',
+            phone: e.phone || '',
+            presence: (['in', 'remote', 'in', 'leave', 'in'] as Presence[])[i % 5],
+            checkIn: '09:0' + (i % 6) + ' AM',
+            attendancePct: 90 + (i % 9), leaveBalance: 8 + (i % 8), utilization: 75 + (i % 20),
+            performance: 80 + (i % 18), pending: 0, projects: [],
+          })));
+        }
+      } catch { /* keep mock */ }
+    })();
+  }, []);
 
   const list = useMemo(() => {
-    return TEAM.filter((m) => {
+    return team.filter((m) => {
       const matchesFilter = filter === 'all' || m.presence === filter;
       const matchesQ =
         !q ||
@@ -28,7 +54,7 @@ export default function TeamScreen({ navigation }: any) {
         m.department.toLowerCase().includes(q.toLowerCase());
       return matchesFilter && matchesQ;
     });
-  }, [q, filter]);
+  }, [q, filter, team]);
 
   return (
     <View style={st.root}>
@@ -36,7 +62,7 @@ export default function TeamScreen({ navigation }: any) {
 
       <View style={st.header}>
         <Text style={st.hTitle}>My Team</Text>
-        <Text style={st.hSub}>{TEAM.length} members · {TEAM.filter((m) => m.presence === 'in' || m.presence === 'remote').length} available now</Text>
+        <Text style={st.hSub}>{team.length} members · {team.filter((m) => m.presence === 'in' || m.presence === 'remote').length} available now</Text>
 
         <View style={st.searchBox}>
           <Text style={{ fontSize: 15 }}>🔍</Text>

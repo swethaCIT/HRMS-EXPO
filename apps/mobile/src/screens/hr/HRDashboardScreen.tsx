@@ -6,6 +6,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { toggleViewMode } from '../../store/slices/authSlice';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
+import { fetchHRRequests } from '../../store/slices/hrRequestsSlice';
 import { initialsOf, avatarColor, PRESENCE_META } from '../../data/managerData';
 import {
   T, HR_PEOPLE, HR_KIND_META, TINT, NEW_JOINERS, CELEBRATIONS,
@@ -27,7 +28,7 @@ export default function HRDashboardScreen({ navigation }: any) {
   const requests = useSelector((s: RootState) => s.hrRequests.items);
   const unread = useSelector((s: RootState) => s.notifications.items.filter((i) => !i.read).length);
 
-  useEffect(() => { dispatch(fetchNotifications()); }, [dispatch]);
+  useEffect(() => { dispatch(fetchNotifications()); dispatch(fetchHRRequests()); }, [dispatch]);
 
   const name = (user?.email?.split('@')[0] || 'HR').replace(/\./g, ' ');
   const pending = requests.filter((r) => r.status === 'pending');
