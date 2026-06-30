@@ -6,6 +6,28 @@ import {
   PRIORITIES, STATUS_STYLE, APPROVAL_STYLE,
   Ticket, TicketStatus,
 } from '../../data/ticketTaxonomy';
+import { ticketApi } from '../../services/api';
+
+function fmtDate(iso: string): string {
+  try { return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }
+  catch { return iso; }
+}
+function mapTicket(t: any): Ticket {
+  return {
+    id: t.ticketId || t.id,
+    subject: t.subject,
+    dept: t.dept,
+    category: t.category,
+    subCategory: t.subCategory,
+    priority: t.priority,
+    status: t.status,
+    approval: t.approval,
+    createdAt: fmtDate(t.createdAt),
+    agent: t.agent,
+    description: t.description,
+    timeline: [{ label: 'Ticket submitted', at: fmtDate(t.createdAt), by: 'You' }],
+  };
+}
 
 const DEPT_ICON: Record<string, string> = { HR: '🧑‍💼', IT: '💻', Admin: '🗂️', Others: '❓' };
 
@@ -68,31 +90,39 @@ export default function TicketsScreen({ navigation, route }: any) {
   const [tickets, setTickets] = useState<Ticket[]>(INITIAL);
   const [filter, setFilter]   = useState<'All' | TicketStatus>('All');
 
-  /* receive a freshly-raised ticket from the wizard */
+  /* fetch my real tickets on mount (fall back to mock when offline) */
+  const loadTickets = React.useCallback(async () => {
+    try {
+      const { data } = await ticketApi.getMine();
+      if (Array.isArray(data)) setTickets(data.map(mapTicket));
+    } catch { /* keep mock */ }
+  }, []);
+  useEffect(() => { loadTickets(); }, [loadTickets]);
+
+  /* a freshly-raised ticket comes back from the wizard → persist then refresh */
   useEffect(() => {
     const nt = route?.params?.newTicket;
     if (!nt) return;
-    const id = `TKT-${1044 + tickets.length}`;
-    const created: Ticket = {
-      id,
-      subject: nt.subject,
-      dept: nt.dept,
-      category: nt.category,
-      subCategory: nt.subCategory,
-      priority: nt.priority,
-      status: 'Open',
-      approval: 'Pending',
-      createdAt: '27 Jun 2026',
-      description: nt.description,
-      notify: nt.notify,
-      attachments: nt.attachments,
-      timeline: [
-        { label: 'Ticket submitted',  at: '27 Jun 2026, 10:00 AM', by: 'You' },
-        { label: 'Awaiting approval', at: null },
-      ],
-    };
-    setTickets(prev => [created, ...prev]);
-    navigation.setParams({ newTicket: undefined });
+    (async () => {
+      try {
+        await ticketApi.create({
+          subject: nt.subject, dept: nt.dept, category: nt.category,
+          subCategory: nt.subCategory, priority: nt.priority, description: nt.description,
+        });
+        await loadTickets();
+      } catch {
+        // offline: optimistic local add
+        const created: Ticket = {
+          id: `TKT-${1044 + tickets.length}`,
+          subject: nt.subject, dept: nt.dept, category: nt.category, subCategory: nt.subCategory,
+          priority: nt.priority, status: 'Open', approval: 'Pending', createdAt: '27 Jun 2026',
+          description: nt.description, notify: nt.notify, attachments: nt.attachments,
+          timeline: [{ label: 'Ticket submitted', at: '27 Jun 2026, 10:00 AM', by: 'You' }, { label: 'Awaiting approval', at: null }],
+        };
+        setTickets(prev => [created, ...prev]);
+      }
+      navigation.setParams({ newTicket: undefined });
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route?.params?.newTicket]);
 

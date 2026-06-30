@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, LayoutAnimation, Platform, UIManager,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
-import { approve, reject, approveAllPending } from '../../store/slices/approvalsSlice';
+import { approve, reject, approveAllPending, fetchApprovals } from '../../store/slices/approvalsSlice';
 import {
   T, KIND_META, TINT, ApprovalStatus, initialsOf, avatarColor,
 } from '../../data/managerData';
@@ -25,6 +25,9 @@ export default function ApprovalsScreen({ navigation }: any) {
   const items = useSelector((s: RootState) => s.approvals.items);
   const [tab, setTab] = useState<Tab>('pending');
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  // Pull real pending leaves from the DB into the inbox.
+  useEffect(() => { dispatch(fetchApprovals()); }, [dispatch]);
 
   const counts: Record<Tab, number> = {
     pending: items.filter((i) => i.status === 'pending').length,

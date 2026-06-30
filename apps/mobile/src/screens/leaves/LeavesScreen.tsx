@@ -3,8 +3,20 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, Modal, StatusBar, Dimensions,
 } from 'react-native';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store';
+import { leaveApi } from '../../services/api';
 
 const { width } = Dimensions.get('window');
+
+/* Map the UI leave-type labels to the backend LeaveType enum values. */
+const TYPE_MAP: Record<string, string> = {
+  'Casual Leave': 'annual',
+  'Sick Leave': 'sick',
+  'Annual Leave': 'annual',
+  'Emergency Leave': 'emergency',
+  'Unpaid Leave': 'unpaid',
+};
 const CELL = Math.floor((width - 64) / 7);
 
 const MONTHS = [
@@ -63,6 +75,7 @@ const ATTENDANCE: Record<string, 'present' | 'leave' | 'wfh'> = {
 
 /* ════════════════════════════════════════════════ */
 export default function LeavesScreen() {
+  const employee = useSelector((st: RootState) => st.auth.employee);
   const today = new Date();
   const [year, setYear]           = useState(today.getFullYear());
   const [month, setMonth]         = useState(today.getMonth());
@@ -93,9 +106,20 @@ export default function LeavesScreen() {
     }
   }
 
-  /* submit */
-  function handleSubmit() {
+  /* submit — creates a real leave request when we have the employee profile */
+  async function handleSubmit() {
     if (!fromDate || !toDate || !reason.trim()) return;
+    if (employee?.id) {
+      try {
+        await leaveApi.create({
+          employeeId: employee.id,
+          type: TYPE_MAP[leaveType] ?? 'annual',
+          startDate: dateKey(fromDate),
+          endDate: dateKey(toDate),
+          reason,
+        });
+      } catch { /* offline: still show the confirmation */ }
+    }
     setShowSummary(true);
   }
 

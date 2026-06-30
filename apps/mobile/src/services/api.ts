@@ -28,6 +28,16 @@ export const authApi = {
     api.post('/auth/login', { email, password }),
   register: (email: string, password: string) =>
     api.post('/auth/register', { email, password }),
+  me: () => api.get('/auth/me'),
+};
+
+export const ticketApi = {
+  getMine: () => api.get('/tickets/mine'),
+  getAll: () => api.get('/tickets'),
+  create: (data: any) => api.post('/tickets', data),
+  approve: (id: string) => api.patch(`/tickets/${id}/approve`),
+  reject: (id: string) => api.patch(`/tickets/${id}/reject`),
+  setStatus: (id: string, status: string) => api.patch(`/tickets/${id}/status`, { status }),
 };
 
 export const employeeApi = {

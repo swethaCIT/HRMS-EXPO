@@ -103,6 +103,8 @@ export interface ApprovalItem {
   reason?: string;
   // kind-specific detail rows shown on the expanded card
   detail: { k: string; v: string }[];
+  /** Present when this item is backed by a real DB leave row (enables real approve/reject). */
+  leaveId?: string;
 }
 
 export const APPROVALS_SEED: ApprovalItem[] = [

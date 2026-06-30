@@ -33,8 +33,15 @@ export const login = createAsyncThunk(
       const { data } = await authApi.login(email, password);
       await AsyncStorage.setItem('access_token', data.access_token);
       // Backend currently returns { id, email } only — fill in a role if missing.
-      const user: User = { ...data.user, role: data.user?.role || roleFromEmail(email) };
-      return { access_token: data.access_token, user };
+      let user: User = { ...data.user, role: data.user?.role || roleFromEmail(email) };
+      // Pull the full profile (role + employee record) now that the token is stored.
+      let employee = null;
+      try {
+        const me = await authApi.me();
+        if (me.data?.user) user = { ...user, ...me.data.user };
+        employee = me.data?.employee ?? null;
+      } catch { /* /me optional — keep login data */ }
+      return { access_token: data.access_token, user, employee };
     } catch (err: any) {
       // Demo fallback: when the backend isn't running, allow exploring the UI
       // with any credentials. Real auth is used whenever the API is reachable.
@@ -48,6 +55,7 @@ export const login = createAsyncThunk(
             role: roleFromEmail(email),
             isActive: true,
           } as User,
+          employee: null,
         };
         await AsyncStorage.setItem('access_token', demo.access_token);
         return demo;
@@ -63,6 +71,7 @@ export const logout = createAsyncThunk('auth/logout', async () => {
 
 const initialState: AuthState = {
   user: null,
+  employee: null,
   token: null,
   isLoading: false,
   error: null,
@@ -88,6 +97,7 @@ const authSlice = createSlice({
         state.isLoading = false;
         state.token = action.payload.access_token;
         state.user = action.payload.user as User;
+        state.employee = (action.payload as any).employee ?? null;
         state.viewMode = defaultViewFor(action.payload.user?.role);
       })
       .addCase(login.rejected, (state, action) => {
@@ -96,6 +106,7 @@ const authSlice = createSlice({
       })
       .addCase(logout.fulfilled, (state) => {
         state.user = null;
+        state.employee = null;
         state.token = null;
         state.viewMode = 'employee';
       });

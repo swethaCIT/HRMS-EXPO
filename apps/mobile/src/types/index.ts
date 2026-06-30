@@ -54,6 +54,8 @@ export interface Payroll {
 
 export interface AuthState {
   user: User | null;
+  /** The signed-in user's employee record (from /auth/me); null for demo/no profile. */
+  employee: Employee | null;
   token: string | null;
   isLoading: boolean;
   error: string | null;

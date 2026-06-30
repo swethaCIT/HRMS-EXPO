@@ -6,6 +6,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { toggleViewMode } from '../../store/slices/authSlice';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
+import { fetchApprovals } from '../../store/slices/approvalsSlice';
 import {
   T, TEAM, PRESENCE_META, KIND_META, TINT, initialsOf, avatarColor,
 } from '../../data/managerData';
@@ -26,7 +27,7 @@ export default function ManagerDashboardScreen({ navigation }: any) {
   const approvals = useSelector((s: RootState) => s.approvals.items);
   const unread = useSelector((s: RootState) => s.notifications.items.filter((i) => !i.read).length);
 
-  useEffect(() => { dispatch(fetchNotifications()); }, [dispatch]);
+  useEffect(() => { dispatch(fetchNotifications()); dispatch(fetchApprovals()); }, [dispatch]);
 
   const name = (user?.email?.split('@')[0] || 'Manager').replace(/\./g, ' ');
   const initials = initialsOf(name);
