@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,22 @@ import {
   TouchableOpacity,
   StatusBar,
   Dimensions,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
+import { attendanceApi } from '../../services/api';
+
+const STATUS_BADGE: Record<string, { label: string; bg: string; fg: string }> = {
+  present: { label: 'ON TIME', bg: '#D1FAE5', fg: '#065F46' },
+  late:    { label: 'LATE',    bg: '#FEF3C7', fg: '#92400E' },
+  wfh:     { label: 'WFH',     bg: '#DBEAFE', fg: '#1E40AF' },
+  half_day:{ label: 'HALF DAY',bg: '#FEF3C7', fg: '#92400E' },
+};
+const fmtTime = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : null;
 
 const { width } = Dimensions.get('window');
 
@@ -39,8 +51,46 @@ function formatCardDate() {
 export default function DashboardScreen({ navigation }: any) {
   const { user } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch<AppDispatch>();
+  const employee = useSelector((s: RootState) => s.auth.employee);
   const unread = useSelector((s: RootState) => s.notifications.items.filter((i) => !i.read).length);
+
+  const [today, setToday] = useState<any>(null);
+  const [punching, setPunching] = useState(false);
+
+  const loadToday = useCallback(async () => {
+    if (!employee?.id) return;
+    try { const { data } = await attendanceApi.today(employee.id); setToday(data || null); } catch { /* offline */ }
+  }, [employee?.id]);
+
   useEffect(() => { dispatch(fetchNotifications()); }, [dispatch]);
+  useEffect(() => { loadToday(); }, [loadToday]);
+
+  const checkedIn = !!today?.checkIn;
+  const checkedOut = !!today?.checkOut;
+
+  const punchIn = async (mode: 'office' | 'wfh') => {
+    if (!employee?.id) return;
+    setPunching(true);
+    try { await attendanceApi.checkIn(employee.id, mode); await loadToday(); }
+    catch { Alert.alert('Punch failed', 'Could not reach the server.'); }
+    finally { setPunching(false); }
+  };
+  const onPunchIn = () => {
+    if (!employee?.id) { Alert.alert('Demo mode', 'Punch needs a real login with an employee profile.'); return; }
+    Alert.alert('Punch In', 'Where are you working from today?', [
+      { text: 'Office', onPress: () => punchIn('office') },
+      { text: 'Work from home', onPress: () => punchIn('wfh') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+  const onPunchOut = async () => {
+    if (!employee?.id) return;
+    setPunching(true);
+    try { await attendanceApi.checkOut(employee.id); await loadToday(); }
+    catch { Alert.alert('Punch failed', 'Could not reach the server.'); }
+    finally { setPunching(false); }
+  };
+
   const initials = user?.email
     ? (user.email.split('@')[0].substring(0, 2)).toUpperCase()
     : 'JD';
@@ -81,28 +131,45 @@ export default function DashboardScreen({ navigation }: any) {
           <View style={styles.punchRow}>
             {/* Punch In */}
             <View style={styles.punchBox}>
-              <View style={styles.punchIconWrap}>
-                <Text style={styles.punchEmoji}>🕐</Text>
-              </View>
+              <View style={styles.punchIconWrap}><Text style={styles.punchEmoji}>🕐</Text></View>
               <Text style={styles.punchLabel}>Punch In</Text>
-              <Text style={[styles.punchTime, { color: '#10B981' }]}>09:14 AM</Text>
-              <View style={styles.badgeGreen}>
-                <Text style={styles.badgeGreenText}>ON TIME</Text>
-              </View>
+              {checkedIn ? (
+                <>
+                  <Text style={[styles.punchTime, { color: '#10B981' }]}>{fmtTime(today.checkIn)}</Text>
+                  <View style={[styles.badgeGreen, { backgroundColor: (STATUS_BADGE[today.status] ?? STATUS_BADGE.present).bg }]}>
+                    <Text style={[styles.badgeGreenText, { color: (STATUS_BADGE[today.status] ?? STATUS_BADGE.present).fg }]}>
+                      {(STATUS_BADGE[today.status] ?? STATUS_BADGE.present).label}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <TouchableOpacity style={styles.punchBtn} onPress={onPunchIn} disabled={punching} activeOpacity={0.85}>
+                  {punching ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.punchBtnTx}>Tap to Punch In</Text>}
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.punchDivider} />
 
             {/* Punch Out */}
             <View style={styles.punchBox}>
-              <View style={styles.punchIconWrap}>
-                <Text style={styles.punchEmoji}>📤</Text>
-              </View>
+              <View style={styles.punchIconWrap}><Text style={styles.punchEmoji}>📤</Text></View>
               <Text style={styles.punchLabel}>Punch Out</Text>
-              <Text style={[styles.punchTime, { color: '#9CA3AF' }]}>{'-- : --'}</Text>
-              <View style={styles.badgeOrange}>
-                <Text style={styles.badgeOrangeText}>PENDING</Text>
-              </View>
+              {checkedOut ? (
+                <>
+                  <Text style={[styles.punchTime, { color: '#EF4444' }]}>{fmtTime(today.checkOut)}</Text>
+                  <View style={[styles.badgeGreen, { backgroundColor: '#F3F4F6' }]}><Text style={[styles.badgeGreenText, { color: '#6B7280' }]}>DONE</Text></View>
+                </>
+              ) : checkedIn ? (
+                <TouchableOpacity style={[styles.punchBtn, { backgroundColor: '#EF4444' }]} onPress={onPunchOut} disabled={punching} activeOpacity={0.85}>
+                  {punching ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.punchBtnTx}>Tap to Punch Out</Text>}
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <Text style={[styles.punchTime, { color: '#9CA3AF' }]}>{'-- : --'}</Text>
+                  <View style={styles.badgeOrange}><Text style={styles.badgeOrangeText}>PENDING</Text></View>
+                </>
+              )}
             </View>
           </View>
         </View>
@@ -332,6 +399,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   badgeOrangeText: { color: '#92400E', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  punchBtn: { backgroundColor: '#4F46E5', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, marginTop: 4, minWidth: 120, alignItems: 'center', justifyContent: 'center', minHeight: 34 },
+  punchBtnTx: { color: '#FFF', fontSize: 12, fontWeight: '700' },
 
   /* Section */
   section: { marginBottom: 16 },

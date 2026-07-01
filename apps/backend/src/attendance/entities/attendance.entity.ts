@@ -30,6 +30,10 @@ export class Attendance {
   @Column({ type: 'enum', enum: AttendanceStatus, default: AttendanceStatus.PRESENT })
   status: AttendanceStatus;
 
+  /** Where the punch came from — ready for biometric machine / geofence integration later. */
+  @Column({ default: 'manual' })
+  source: string; // manual | biometric | geo | system
+
   @Column({ nullable: true })
   notes: string;
 

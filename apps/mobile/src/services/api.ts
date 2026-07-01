@@ -47,8 +47,10 @@ export const employeeApi = {
 };
 
 export const attendanceApi = {
-  checkIn: (employeeId: string) => api.post(`/attendance/${employeeId}/check-in`),
+  checkIn: (employeeId: string, mode: 'office' | 'wfh' = 'office') =>
+    api.post(`/attendance/${employeeId}/check-in`, { mode, source: 'manual' }),
   checkOut: (employeeId: string) => api.post(`/attendance/${employeeId}/check-out`),
+  today: (employeeId: string) => api.get(`/attendance/today/${employeeId}`),
   getByEmployee: (employeeId: string) => api.get(`/attendance/${employeeId}`),
 };
 
