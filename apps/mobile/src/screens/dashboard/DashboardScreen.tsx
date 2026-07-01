@@ -14,6 +14,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
 import { attendanceApi } from '../../services/api';
+import Icon from '../../components/Icon';
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; fg: string }> = {
   present: { label: 'ON TIME', bg: '#D1FAE5', fg: '#065F46' },
@@ -107,7 +108,7 @@ export default function DashboardScreen({ navigation }: any) {
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.bellWrap} onPress={() => navigation?.navigate('Notifications')}>
-            <Text style={styles.bellEmoji}>🔔</Text>
+            <Icon name="bell" size={18} color="#FFFFFF" />
             {unread > 0 && <View style={styles.bellDot} />}
           </TouchableOpacity>
           <TouchableOpacity style={styles.avatar} onPress={() => navigation?.navigate('Profile')} activeOpacity={0.8}>

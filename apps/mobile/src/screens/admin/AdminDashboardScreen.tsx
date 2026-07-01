@@ -8,6 +8,7 @@ import { toggleViewMode } from '../../store/slices/authSlice';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
 import { userApi } from '../../services/api';
 import { T, initialsOf } from '../../data/managerData';
+import Icon from '../../components/Icon';
 
 function greeting() {
   const h = new Date().getHours();
@@ -53,7 +54,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
           </View>
           <View style={st.headerRight}>
             <TouchableOpacity style={st.bell} onPress={() => navigation?.navigate('Notifications')}>
-              <Text style={{ fontSize: 16 }}>🔔</Text>
+              <Icon name="bell" size={18} color="#FFFFFF" />
               {unread > 0 && <View style={st.bellDot} />}
             </TouchableOpacity>
             <TouchableOpacity style={[st.avatar, { backgroundColor: T.primary }]} onPress={() => navigation?.navigate('Profile')} activeOpacity={0.8}><Text style={st.avatarTx}>{initialsOf(name)}</Text></TouchableOpacity>

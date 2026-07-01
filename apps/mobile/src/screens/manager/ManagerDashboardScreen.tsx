@@ -10,6 +10,7 @@ import { fetchApprovals } from '../../store/slices/approvalsSlice';
 import {
   T, TEAM, PRESENCE_META, KIND_META, TINT, initialsOf, avatarColor,
 } from '../../data/managerData';
+import Icon from '../../components/Icon';
 
 const { width } = Dimensions.get('window');
 
@@ -59,7 +60,7 @@ export default function ManagerDashboardScreen({ navigation }: any) {
           </View>
           <View style={st.headerRight}>
             <TouchableOpacity style={st.bell} onPress={() => navigation?.navigate('Notifications')}>
-              <Text style={{ fontSize: 16 }}>🔔</Text>
+              <Icon name="bell" size={18} color="#FFFFFF" />
               {unread > 0 && <View style={st.bellDot} />}
             </TouchableOpacity>
             <TouchableOpacity style={[st.avatar, { backgroundColor: T.primary }]} onPress={() => navigation?.navigate('Profile')} activeOpacity={0.8}>

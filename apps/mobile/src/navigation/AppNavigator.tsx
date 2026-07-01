@@ -32,27 +32,35 @@ import HRInsightsScreen  from '../screens/hr/HRInsightsScreen';
 import AdminDashboardScreen  from '../screens/admin/AdminDashboardScreen';
 import UserManagementScreen  from '../screens/admin/UserManagementScreen';
 import NotificationsScreen   from '../screens/common/NotificationsScreen';
+import Icon, { IconName }    from '../components/Icon';
 
 const RootStack = createNativeStackNavigator();
 const Tab       = createBottomTabNavigator();
 const Inner     = createNativeStackNavigator();
 
-/* ── Tab icon maps ── */
-const EMP_ICONS: Record<string, string> = { Home: '🏠', Tickets: '🎫', Leave: '📋', Profile: '👤' };
-const MGR_ICONS: Record<string, string> = { Home: '🏠', Approvals: '✅', Team: '👥', Insights: '📈', Profile: '👤' };
-const HR_ICONS: Record<string, string>  = { Home: '🏠', Requests: '📨', People: '👥', Insights: '📊', Profile: '👤' };
-const ADMIN_ICONS: Record<string, string> = { Home: '🏠', Users: '👤', People: '🏢', Insights: '📊', Profile: '👤' };
+/* ── Tab route → line-icon map ── */
+const TAB_ICON: Record<string, IconName> = {
+  Home: 'home',
+  Tickets: 'tag',
+  Leave: 'calendar',
+  Approvals: 'check-square',
+  Team: 'users',
+  Insights: 'bar-chart',
+  Requests: 'inbox',
+  People: 'users',
+  Users: 'user',
+  Profile: 'user',
+};
 
-function TabIcon({ name, focused, icons, badge }: { name: string; focused: boolean; icons: Record<string, string>; badge?: number }) {
+function TabIcon({ name, focused, badge }: { name: string; focused: boolean; badge?: number }) {
   return (
     <View style={tabStyles.wrap}>
-      <Text style={tabStyles.emoji}>{icons[name]}</Text>
+      <Icon name={TAB_ICON[name] ?? 'home'} size={22} color={focused ? '#4F46E5' : '#9CA3AF'} strokeWidth={focused ? 2.4 : 2} />
       {!!badge && badge > 0 && (
         <View style={tabStyles.badge}>
           <Text style={tabStyles.badgeTx}>{badge > 9 ? '9+' : badge}</Text>
         </View>
       )}
-      {focused && <View style={tabStyles.activeDot} />}
     </View>
   );
 }
@@ -130,7 +138,7 @@ const commonScreenOptions = {
 /* ── Employee tabs ── */
 function EmployeeTabs() {
   return (
-    <Tab.Navigator screenOptions={({ route }) => ({ ...commonScreenOptions, tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} icons={EMP_ICONS} /> })}>
+    <Tab.Navigator screenOptions={({ route }) => ({ ...commonScreenOptions, tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} /> })}>
       <Tab.Screen name="Home"    component={EmpHome} />
       <Tab.Screen name="Tickets" component={EmpTickets} />
       <Tab.Screen name="Leave"   component={EmpLeave} />
@@ -143,7 +151,7 @@ function EmployeeTabs() {
 function ManagerTabs() {
   const pending = useSelector((s: RootState) => s.approvals.items.filter((i) => i.status === 'pending').length);
   return (
-    <Tab.Navigator screenOptions={({ route }) => ({ ...commonScreenOptions, tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} icons={MGR_ICONS} badge={route.name === 'Approvals' ? pending : undefined} /> })}>
+    <Tab.Navigator screenOptions={({ route }) => ({ ...commonScreenOptions, tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} badge={route.name === 'Approvals' ? pending : undefined} /> })}>
       <Tab.Screen name="Home"      component={MgrHome} />
       <Tab.Screen name="Approvals" component={MgrApprovals} />
       <Tab.Screen name="Team"      component={MgrTeam} />
@@ -157,7 +165,7 @@ function ManagerTabs() {
 function HRTabs() {
   const pending = useSelector((s: RootState) => s.hrRequests.items.filter((i) => i.status === 'pending').length);
   return (
-    <Tab.Navigator screenOptions={({ route }) => ({ ...commonScreenOptions, tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} icons={HR_ICONS} badge={route.name === 'Requests' ? pending : undefined} /> })}>
+    <Tab.Navigator screenOptions={({ route }) => ({ ...commonScreenOptions, tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} badge={route.name === 'Requests' ? pending : undefined} /> })}>
       <Tab.Screen name="Home"     component={HrHome} />
       <Tab.Screen name="Requests" component={HrRequests} />
       <Tab.Screen name="People"   component={HrPeople} />
@@ -170,7 +178,7 @@ function HRTabs() {
 /* ── Admin tabs ── */
 function AdminTabs() {
   return (
-    <Tab.Navigator screenOptions={({ route }) => ({ ...commonScreenOptions, tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} icons={ADMIN_ICONS} /> })}>
+    <Tab.Navigator screenOptions={({ route }) => ({ ...commonScreenOptions, tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} /> })}>
       <Tab.Screen name="Home"     component={AdmHome} />
       <Tab.Screen name="Users"    component={AdmUsers} />
       <Tab.Screen name="People"   component={HrPeople} />

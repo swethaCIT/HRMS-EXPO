@@ -11,6 +11,7 @@ import { initialsOf, avatarColor, PRESENCE_META } from '../../data/managerData';
 import {
   T, HR_PEOPLE, HR_KIND_META, TINT, NEW_JOINERS, CELEBRATIONS,
 } from '../../data/hrData';
+import Icon from '../../components/Icon';
 
 const { width } = Dimensions.get('window');
 
@@ -55,7 +56,7 @@ export default function HRDashboardScreen({ navigation }: any) {
           </View>
           <View style={st.headerRight}>
             <TouchableOpacity style={st.bell} onPress={() => navigation?.navigate('Notifications')}>
-              <Text style={{ fontSize: 16 }}>🔔</Text>
+              <Icon name="bell" size={18} color="#FFFFFF" />
               {unread > 0 && <View style={st.bellDot} />}
             </TouchableOpacity>
             <TouchableOpacity style={[st.avatar, { backgroundColor: T.primary }]} onPress={() => navigation?.navigate('Profile')} activeOpacity={0.8}>
