@@ -60,6 +60,28 @@ export class Employee {
   @Column({ nullable: true })
   avatarUrl: string;
 
+  /* ── Enterprise HR fields ── */
+  @Column({ nullable: true }) grade: string;              // band / level, e.g. "L3 · Senior"
+  @Column({ nullable: true }) workLocation: string;       // e.g. "Bengaluru, IN"
+  @Column({ nullable: true }) workMode: string;           // Office | Hybrid | Remote
+  @Column({ nullable: true }) reportingManager: string;   // manager display name
+
+  @Column({ nullable: true }) gender: string;
+  @Column({ nullable: true }) bloodGroup: string;
+  @Column({ nullable: true }) maritalStatus: string;
+  @Column({ nullable: true }) nationality: string;
+
+  @Column({ nullable: true }) personalEmail: string;
+  @Column({ nullable: true }) address: string;
+  @Column({ nullable: true }) emergencyContactName: string;
+  @Column({ nullable: true }) emergencyContactPhone: string;
+
+  // Statutory / payroll (store masked / non-sensitive references)
+  @Column({ nullable: true }) pan: string;
+  @Column({ nullable: true }) uan: string;                // PF universal account no.
+  @Column({ nullable: true }) bankName: string;
+  @Column({ nullable: true }) bankLast4: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -41,33 +41,6 @@ export default function ProfileScreen({ navigation }: any) {
   const viewLabel = kind === 'admin' ? 'Admin view' : kind === 'hr' ? 'HR view' : 'Manager view';
   const statusActive = (employee?.status ?? 'active') === 'active';
 
-  const managerRows: { icon: IconName; label: string; go?: string; hint?: string }[] =
-    kind === 'admin'
-      ? [
-          { icon: 'user', label: 'User Management', go: 'Users', hint: 'Admin' },
-          { icon: 'users', label: 'People', go: 'People' },
-          { icon: 'bar-chart', label: 'Org Insights', go: 'Insights' },
-        ]
-      : kind === 'hr'
-        ? [
-            { icon: 'inbox', label: 'Requests', go: 'Requests', hint: 'Process' },
-            { icon: 'users', label: 'People', go: 'People' },
-            { icon: 'bar-chart', label: 'Org Insights', go: 'Insights' },
-          ]
-        : [
-            { icon: 'check-square', label: 'Approvals', go: 'Approvals', hint: 'Review' },
-            { icon: 'users', label: 'My Team', go: 'Team' },
-            { icon: 'bar-chart', label: 'Team Insights', go: 'Insights' },
-          ];
-
-  const SHORTCUTS: { icon: IconName; label: string; go?: string; hint?: string }[] = canManage
-    ? [...managerRows, { icon: 'credit-card', label: 'My Payslip', go: 'Payroll' }, { icon: 'clock', label: 'My Timesheet', go: 'Timesheet' }]
-    : [
-        { icon: 'credit-card', label: 'My Payslip', go: 'Payroll' },
-        { icon: 'clock', label: 'My Timesheet', go: 'Timesheet' },
-        { icon: 'box', label: 'My Assets', go: 'Assets' },
-      ];
-
   const soon = (what: string) => Alert.alert(what, 'This section is coming soon.');
   const confirmLogout = () =>
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
@@ -75,16 +48,36 @@ export default function ProfileScreen({ navigation }: any) {
       { text: 'Sign out', style: 'destructive', onPress: () => dispatch(logout()) },
     ]);
 
-  // Employment detail rows (only show ones we actually have)
-  const details: { label: string; value: string }[] = [
+  const ten = tenure(employee?.dateOfJoining);
+
+  // Employment
+  const employment: { label: string; value: string }[] = [
     { label: 'Employee ID', value: employee?.employeeId || '—' },
     { label: 'Designation', value: employee?.designation || '—' },
     { label: 'Department', value: employee?.department || '—' },
+    { label: 'Grade / Band', value: employee?.grade || '—' },
     { label: 'Employment type', value: titleCase(employee?.employmentType) },
+    { label: 'Work mode', value: employee?.workMode || '—' },
+    { label: 'Work location', value: employee?.workLocation || '—' },
+    { label: 'Reporting to', value: employee?.reportingManager || '—' },
+    { label: 'Date of joining', value: `${fmtDate(employee?.dateOfJoining)}${ten ? `  ·  ${ten}` : ''}` },
     { label: 'Status', value: titleCase(employee?.status) },
-    { label: 'Date of joining', value: fmtDate(employee?.dateOfJoining) },
   ];
-  const ten = tenure(employee?.dateOfJoining);
+  // Personal
+  const personal: { label: string; value: string }[] = [
+    { label: 'Date of birth', value: fmtDate(employee?.dateOfBirth) },
+    { label: 'Gender', value: employee?.gender || '—' },
+    { label: 'Blood group', value: employee?.bloodGroup || '—' },
+    { label: 'Marital status', value: titleCase(employee?.maritalStatus) },
+    { label: 'Nationality', value: employee?.nationality || '—' },
+  ];
+  // Statutory & bank
+  const statutory: { label: string; value: string }[] = [
+    { label: 'PAN', value: employee?.pan || '—' },
+    { label: 'UAN (PF)', value: employee?.uan || '—' },
+    { label: 'Bank', value: employee?.bankName || '—' },
+    { label: 'Account', value: employee?.bankLast4 ? `•••• ${employee.bankLast4}` : '—' },
+  ];
 
   return (
     <View style={st.root}>
@@ -126,47 +119,69 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         )}
 
-        {/* Employment details */}
-        <Text style={st.sectionTitle}>EMPLOYMENT DETAILS</Text>
+        {/* Employment */}
+        <Text style={st.sectionTitle}>EMPLOYMENT</Text>
         <View style={st.card}>
-          {details.map((d, i) => (
-            <View key={d.label} style={[st.detailRow, i < details.length - 1 && st.rowDivider]}>
+          {employment.map((d, i) => (
+            <View key={d.label} style={[st.detailRow, i < employment.length - 1 && st.rowDivider]}>
               <Text style={st.detailK}>{d.label}</Text>
-              <Text style={st.detailV}>{d.value}{d.label === 'Date of joining' && ten ? `  ·  ${ten}` : ''}</Text>
+              <Text style={st.detailV}>{d.value}</Text>
             </View>
           ))}
         </View>
 
-        {/* Contact */}
-        <Text style={st.sectionTitle}>CONTACT</Text>
+        {/* Personal */}
+        <Text style={st.sectionTitle}>PERSONAL</Text>
+        <View style={st.card}>
+          {personal.map((d, i) => (
+            <View key={d.label} style={[st.detailRow, i < personal.length - 1 && st.rowDivider]}>
+              <Text style={st.detailK}>{d.label}</Text>
+              <Text style={st.detailV}>{d.value}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Statutory & bank */}
+        <Text style={st.sectionTitle}>STATUTORY & BANK</Text>
+        <View style={st.card}>
+          {statutory.map((d, i) => (
+            <View key={d.label} style={[st.detailRow, i < statutory.length - 1 && st.rowDivider]}>
+              <Text style={st.detailK}>{d.label}</Text>
+              <Text style={st.detailV}>{d.value}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Contact & emergency */}
+        <Text style={st.sectionTitle}>CONTACT & EMERGENCY</Text>
         <View style={st.card}>
           <TouchableOpacity style={[st.row, st.rowDivider]} onPress={() => user?.email && Linking.openURL(`mailto:${user.email}`)}>
             <View style={st.rowIcon}><Icon name="inbox" size={17} color={T.primary} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={st.rowSubLabel}>Email</Text>
-              <Text style={st.rowLabel}>{user?.email || '—'}</Text>
-            </View>
+            <View style={{ flex: 1 }}><Text style={st.rowSubLabel}>Work email</Text><Text style={st.rowLabel}>{user?.email || '—'}</Text></View>
           </TouchableOpacity>
-          <TouchableOpacity style={st.row} onPress={() => employee?.phone && Linking.openURL(`tel:${employee.phone.replace(/\s/g, '')}`)}>
+          {!!employee?.personalEmail && (
+            <View style={[st.row, st.rowDivider]}>
+              <View style={st.rowIcon}><Icon name="inbox" size={17} color={T.primary} /></View>
+              <View style={{ flex: 1 }}><Text style={st.rowSubLabel}>Personal email</Text><Text style={st.rowLabel}>{employee.personalEmail}</Text></View>
+            </View>
+          )}
+          <TouchableOpacity style={[st.row, st.rowDivider]} onPress={() => employee?.phone && Linking.openURL(`tel:${employee.phone.replace(/\s/g, '')}`)}>
             <View style={st.rowIcon}><Icon name="user" size={17} color={T.primary} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={st.rowSubLabel}>Phone</Text>
-              <Text style={st.rowLabel}>{employee?.phone || '—'}</Text>
-            </View>
+            <View style={{ flex: 1 }}><Text style={st.rowSubLabel}>Phone</Text><Text style={st.rowLabel}>{employee?.phone || '—'}</Text></View>
           </TouchableOpacity>
-        </View>
-
-        {/* Shortcuts */}
-        <Text style={st.sectionTitle}>SHORTCUTS</Text>
-        <View style={st.card}>
-          {SHORTCUTS.map((r, i, arr) => (
-            <TouchableOpacity key={r.label} style={[st.row, i < arr.length - 1 && st.rowDivider]} onPress={() => r.go && navigation?.navigate(r.go)}>
-              <View style={st.rowIcon}><Icon name={r.icon} size={17} color={T.primary} /></View>
-              <Text style={st.rowLabel}>{r.label}</Text>
-              {r.hint && <Text style={st.rowHint}>{r.hint}</Text>}
-              <Icon name="chevron-right" size={18} color="#D1D5DB" />
-            </TouchableOpacity>
-          ))}
+          {!!employee?.address && (
+            <View style={[st.row, st.rowDivider]}>
+              <View style={st.rowIcon}><Icon name="home" size={17} color={T.primary} /></View>
+              <View style={{ flex: 1 }}><Text style={st.rowSubLabel}>Address</Text><Text style={st.rowLabel}>{employee.address}</Text></View>
+            </View>
+          )}
+          <View style={st.row}>
+            <View style={[st.rowIcon, { backgroundColor: '#FEE2E2' }]}><Icon name="shield" size={17} color="#DC2626" /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={st.rowSubLabel}>Emergency contact</Text>
+              <Text style={st.rowLabel}>{employee?.emergencyContactName || '—'}{employee?.emergencyContactPhone ? ` · ${employee.emergencyContactPhone}` : ''}</Text>
+            </View>
+          </View>
         </View>
 
         {/* Account */}

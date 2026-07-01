@@ -14,10 +14,28 @@ export interface Employee {
   department?: string;
   designation?: string;
   dateOfJoining?: string;
+  dateOfBirth?: string;
   employmentType: string;
   status: string;
   avatarUrl?: string;
   user: User;
+  // enterprise HR fields
+  grade?: string;
+  workLocation?: string;
+  workMode?: string;
+  reportingManager?: string;
+  gender?: string;
+  bloodGroup?: string;
+  maritalStatus?: string;
+  nationality?: string;
+  personalEmail?: string;
+  address?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  pan?: string;
+  uan?: string;
+  bankName?: string;
+  bankLast4?: string;
 }
 
 export interface Attendance {

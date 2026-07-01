@@ -159,6 +159,31 @@ async function main() {
       console.log(`   ↳ employee ${p.employeeId} + attendance/leave/payroll`);
     }
 
+    // enterprise HR fields (idempotent — fills once)
+    if (emp && !emp.grade) {
+      Object.assign(emp, {
+        grade: p.role === UserRole.MANAGER ? 'L5 · Lead' : p.role === UserRole.HR ? 'L4 · Manager' : 'L3 · Senior',
+        workLocation: 'Bengaluru, IN',
+        workMode: 'Hybrid',
+        reportingManager: p.role === UserRole.EMPLOYEE ? 'Arjun Menon' : 'Divya Nair (VP)',
+        gender: 'Not disclosed',
+        bloodGroup: 'O+',
+        maritalStatus: 'Single',
+        nationality: 'Indian',
+        dateOfBirth: new Date('1996-05-14'),
+        personalEmail: p.email.replace('@hrms.com', '@gmail.com'),
+        address: '12 MG Road, Bengaluru, Karnataka 560001',
+        emergencyContactName: 'Priya Verma',
+        emergencyContactPhone: '+91 90000 11111',
+        pan: 'ABCDE1234F',
+        uan: '1001234567' + p.employeeId.slice(-2),
+        bankName: 'HDFC Bank',
+        bankLast4: '48' + p.employeeId.slice(-2),
+      });
+      await employeeRepo.save(emp);
+      console.log(`   ↳ enterprise fields for ${p.employeeId}`);
+    }
+
     // assets (idempotent — also seeds for pre-existing employees)
     if (emp && (await assetRepo.count({ where: { employeeId: emp.id } })) === 0) {
       const tag = p.employeeId.slice(-2);
