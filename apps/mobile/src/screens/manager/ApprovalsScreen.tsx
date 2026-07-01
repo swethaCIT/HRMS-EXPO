@@ -59,9 +59,11 @@ export default function ApprovalsScreen({ navigation }: any) {
       {/* ── Header ── */}
       <View style={st.header}>
         <View style={st.headerRow}>
-          <TouchableOpacity onPress={() => navigation?.goBack?.()} style={st.back}>
-            <Text style={st.backTx}>‹</Text>
-          </TouchableOpacity>
+          {navigation?.canGoBack?.() && (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={st.back}>
+              <Text style={st.backTx}>‹</Text>
+            </TouchableOpacity>
+          )}
           <View style={{ flex: 1 }}>
             <Text style={st.hTitle}>Approvals</Text>
             <Text style={st.hSub}>{counts.pending} awaiting your action</Text>

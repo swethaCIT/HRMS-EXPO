@@ -54,7 +54,9 @@ export default function RequestsScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor={T.header} />
       <View style={st.header}>
         <View style={st.headerRow}>
-          <TouchableOpacity onPress={() => navigation?.goBack?.()} style={st.back}><Text style={st.backTx}>‹</Text></TouchableOpacity>
+          {navigation?.canGoBack?.() && (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={st.back}><Text style={st.backTx}>‹</Text></TouchableOpacity>
+          )}
           <View style={{ flex: 1 }}>
             <Text style={st.hTitle}>Requests</Text>
             <Text style={st.hSub}>{counts.pending} awaiting your action</Text>
