@@ -15,6 +15,8 @@ import { StorageModule } from './storage/storage.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { AssetsModule } from './assets/assets.module';
 import { RequestsModule } from './requests/requests.module';
+import { MailModule } from './mail/mail.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 import { getDatabaseConfig } from './config/database.config';
 
 @Module({
@@ -41,6 +43,8 @@ import { getDatabaseConfig } from './config/database.config';
     TicketsModule,
     AssetsModule,
     RequestsModule,
+    MailModule,
+    OnboardingModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

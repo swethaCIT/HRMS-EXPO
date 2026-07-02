@@ -29,6 +29,15 @@ export class User {
   @Column({ nullable: true })
   fcmToken: string;
 
+  // Password reset (bcrypt hash of a one-time token + its expiry)
+  @Column({ nullable: true })
+  @Exclude()
+  resetTokenHash: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  @Exclude()
+  resetTokenExpires: Date;
+
   @CreateDateColumn()
   createdAt: Date;
 

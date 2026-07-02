@@ -119,6 +119,14 @@ const authSlice = createSlice({
     toggleViewMode: (state) => {
       state.viewMode = state.viewMode === 'manager' ? 'employee' : 'manager';
     },
+    /** Establish a session directly (used after onboarding self-registration auto-login). */
+    setSession: (state, action: { payload: { access_token: string; user: User; employee?: any } }) => {
+      state.token = action.payload.access_token;
+      state.user = { ...action.payload.user, role: action.payload.user?.role || roleFromEmail(action.payload.user?.email || '') };
+      state.employee = action.payload.employee ?? null;
+      state.viewMode = defaultViewFor(state.user?.role);
+      state.booting = false;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -153,5 +161,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, setViewMode, toggleViewMode } = authSlice.actions;
+export const { clearError, setViewMode, toggleViewMode, setSession } = authSlice.actions;
 export default authSlice.reducer;

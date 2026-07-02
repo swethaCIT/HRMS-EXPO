@@ -46,6 +46,16 @@ export class UsersService {
     await this.userRepo.update(id, { fcmToken: token });
   }
 
+  /* ── Password reset ── */
+  async setResetToken(id: string, resetTokenHash: string, resetTokenExpires: Date): Promise<void> {
+    await this.userRepo.update(id, { resetTokenHash, resetTokenExpires });
+  }
+
+  async setPassword(id: string, plainPassword: string): Promise<void> {
+    const hashed = await bcrypt.hash(plainPassword, 10);
+    await this.userRepo.update(id, { password: hashed, resetTokenHash: null as any, resetTokenExpires: null as any });
+  }
+
   async remove(id: string): Promise<void> {
     await this.findOne(id);
     await this.userRepo.softDelete(id);

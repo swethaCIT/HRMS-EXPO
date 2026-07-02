@@ -33,6 +33,8 @@ import AdminDashboardScreen  from '../screens/admin/AdminDashboardScreen';
 import UserManagementScreen  from '../screens/admin/UserManagementScreen';
 import NotificationsScreen   from '../screens/common/NotificationsScreen';
 import Icon, { IconName }    from '../components/Icon';
+import ForgotPasswordScreen     from '../screens/auth/ForgotPasswordScreen';
+import OnboardingRegisterScreen from '../screens/auth/OnboardingRegisterScreen';
 
 const RootStack = createNativeStackNavigator();
 const Tab       = createBottomTabNavigator();
@@ -221,7 +223,11 @@ export default function AppNavigator() {
         {token ? (
           <RootStack.Screen name="Main" component={MainTabs} />
         ) : (
-          <RootStack.Screen name="Login" component={LoginScreen} />
+          <>
+            <RootStack.Screen name="Login" component={LoginScreen} />
+            <RootStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <RootStack.Screen name="OnboardingRegister" component={OnboardingRegisterScreen} />
+          </>
         )}
       </RootStack.Navigator>
     </NavigationContainer>

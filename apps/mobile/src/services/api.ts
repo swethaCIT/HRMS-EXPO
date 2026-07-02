@@ -29,6 +29,16 @@ export const authApi = {
   register: (email: string, password: string) =>
     api.post('/auth/register', { email, password }),
   me: () => api.get('/auth/me'),
+  forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (email: string, otp: string, password: string) =>
+    api.post('/auth/reset-password', { email, otp, password }),
+};
+
+export const onboardingApi = {
+  invite: (data: any) => api.post('/onboarding/invite', data),
+  verify: (personalEmail: string, code: string) => api.post('/onboarding/verify', { personalEmail, code }),
+  complete: (data: any) => api.post('/onboarding/complete', data),
+  list: () => api.get('/onboarding'),
 };
 
 export const ticketApi = {

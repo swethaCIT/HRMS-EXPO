@@ -27,6 +27,22 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  forgotPassword(@Body('email') email: string) {
+    return this.authService.forgotPassword(email);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  resetPassword(
+    @Body('email') email: string,
+    @Body('otp') otp: string,
+    @Body('password') password: string,
+  ) {
+    return this.authService.resetPassword(email, otp, password);
+  }
+
   /** Profile of the signed-in user + their employee record. */
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
