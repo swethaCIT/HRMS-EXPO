@@ -27,17 +27,9 @@ import { getDatabaseConfig } from './config/database.config';
       inject: [ConfigService],
       useFactory: getDatabaseConfig,
     }),
-    CacheModule.registerAsync({
-      isGlobal: true,
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        store: 'ioredis',
-        host: config.get('REDIS_HOST', 'localhost'),
-        port: config.get<number>('REDIS_PORT', 6379),
-        ttl: 300,
-      }),
-    }),
+    // In-memory cache (fast, zero external deps). Redis was causing connection
+    // retry storms + slow/flaky startup when it wasn't running.
+    CacheModule.register({ isGlobal: true, ttl: 300_000 }),
     AuthModule,
     UsersModule,
     EmployeesModule,

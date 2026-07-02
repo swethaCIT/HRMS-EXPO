@@ -6,7 +6,8 @@ export const getDatabaseConfig = (config: ConfigService): TypeOrmModuleOptions =
     type: 'postgres' as const,
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
     synchronize: config.get('NODE_ENV') !== 'production',
-    logging: config.get('NODE_ENV') === 'development',
+    // Log only errors — logging every SQL query slows each request and floods the console.
+    logging: ['error'] as ('error')[],
   };
 
   // Hosted Postgres (e.g. Supabase) via a single connection string. SSL is required.

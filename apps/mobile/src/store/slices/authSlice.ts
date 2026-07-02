@@ -41,6 +41,8 @@ export const login = createAsyncThunk(
         if (me.data?.user) user = { ...user, ...me.data.user };
         employee = me.data?.employee ?? null;
       } catch { /* /me optional — keep login data */ }
+      // Cache profile so we can restore the session offline (see restoreSession).
+      await AsyncStorage.setItem('auth_cache', JSON.stringify({ user, employee }));
       return { access_token: data.access_token, user, employee };
     } catch (err: any) {
       // Demo fallback: when the backend isn't running, allow exploring the UI
@@ -66,20 +68,33 @@ export const login = createAsyncThunk(
 );
 
 export const logout = createAsyncThunk('auth/logout', async () => {
-  await AsyncStorage.removeItem('access_token');
+  await AsyncStorage.removeItem('access_token'); await AsyncStorage.removeItem('auth_cache');
 });
 
-/** Restore a saved session on app launch: read token → fetch /auth/me → hydrate. */
+/**
+ * Restore a saved session on launch. Resilient: only signs the user out on a real
+ * 401 (invalid/expired token). On a transient network error it keeps the cached
+ * session so a flaky connection at startup doesn't kick the user to the login screen.
+ */
 export const restoreSession = createAsyncThunk('auth/restore', async (_, { rejectWithValue }) => {
   const token = await AsyncStorage.getItem('access_token');
   if (!token || token === 'demo-token') return rejectWithValue('no-session');
+  const cachedRaw = await AsyncStorage.getItem('auth_cache');
+  const cached = cachedRaw ? JSON.parse(cachedRaw) : null;
   try {
     const me = await authApi.me();
     const user: User = { ...me.data.user, role: me.data.user?.role };
-    return { access_token: token, user, employee: me.data.employee ?? null };
-  } catch {
-    await AsyncStorage.removeItem('access_token');
-    return rejectWithValue('invalid-session');
+    const employee = me.data.employee ?? null;
+    await AsyncStorage.setItem('auth_cache', JSON.stringify({ user, employee }));
+    return { access_token: token, user, employee };
+  } catch (err: any) {
+    if (err?.response?.status === 401) {
+      await AsyncStorage.removeItem('access_token'); await AsyncStorage.removeItem('auth_cache');
+      return rejectWithValue('invalid-session');
+    }
+    // Network/other error — keep the session using the cached profile if we have it.
+    if (cached?.user) return { access_token: token, user: cached.user, employee: cached.employee ?? null };
+    return rejectWithValue('offline-no-cache');
   }
 });
 
