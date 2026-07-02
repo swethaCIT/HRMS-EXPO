@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Ticket } from './entities/ticket.entity';
 import { CreateTicketDto } from './dto/create-ticket.dto';
+import { clampPaging } from '../common/utils/pagination';
 
 @Injectable()
 export class TicketsService {
@@ -25,10 +26,11 @@ export class TicketsService {
   }
 
   findAll(limit?: number, offset?: number): Promise<Ticket[]> {
+    const { take, skip } = clampPaging(limit, offset);
     return this.ticketRepo.find({
       order: { createdAt: 'DESC' },
-      take: limit && limit > 0 ? limit : undefined,
-      skip: offset && offset > 0 ? offset : undefined,
+      take,
+      skip,
     });
   }
 

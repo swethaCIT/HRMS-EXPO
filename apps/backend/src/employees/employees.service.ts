@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Employee } from './entities/employee.entity';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { clampPaging } from '../common/utils/pagination';
 
 @Injectable()
 export class EmployeesService {
@@ -21,11 +22,12 @@ export class EmployeesService {
   }
 
   async findAll(limit?: number, offset?: number): Promise<Employee[]> {
+    const { take, skip } = clampPaging(limit, offset);
     return this.employeeRepo.find({
       relations: { user: true },
       order: { employeeId: 'ASC' },
-      take: limit && limit > 0 ? limit : undefined,
-      skip: offset && offset > 0 ? offset : undefined,
+      take,
+      skip,
     });
   }
 
