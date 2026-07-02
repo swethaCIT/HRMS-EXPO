@@ -13,7 +13,7 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
-import { attendanceApi } from '../../services/api';
+import { attendanceApi, leaveApi } from '../../services/api';
 import Icon from '../../components/Icon';
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; fg: string }> = {
@@ -57,6 +57,7 @@ export default function DashboardScreen({ navigation }: any) {
 
   const [today, setToday] = useState<any>(null);
   const [punching, setPunching] = useState(false);
+  const [leaveDays, setLeaveDays] = useState<number | null>(null);
 
   const loadToday = useCallback(async () => {
     if (!employee?.id) return;
@@ -65,6 +66,12 @@ export default function DashboardScreen({ navigation }: any) {
 
   useEffect(() => { dispatch(fetchNotifications()); }, [dispatch]);
   useEffect(() => { loadToday(); }, [loadToday]);
+  useEffect(() => {
+    if (!employee?.id) return;
+    (async () => {
+      try { const { data } = await leaveApi.balance(employee.id); setLeaveDays(data?.totalRemaining ?? null); } catch { /* offline */ }
+    })();
+  }, [employee?.id]);
 
   const checkedIn = !!today?.checkIn;
   const checkedOut = !!today?.checkOut;
@@ -186,7 +193,7 @@ export default function DashboardScreen({ navigation }: any) {
 
           <View style={styles.overviewGrid}>
             {[
-              { emoji: '📅', label: 'Leave Balance', value: '12 Days', bg: '#EFF6FF', iconBg: '#DBEAFE' },
+              { emoji: '📅', label: 'Leave Balance', value: leaveDays != null ? `${leaveDays} Days` : '—', bg: '#EFF6FF', iconBg: '#DBEAFE' },
               { emoji: '📊', label: 'Attendance',    value: '94%',     bg: '#EFF6FF', iconBg: '#DBEAFE' },
               { emoji: '💻', label: 'My Assets',     value: '03',      bg: '#EFF6FF', iconBg: '#DBEAFE' },
               { emoji: '🎧', label: 'Support',       value: 'Ticket',  bg: '#FFF7ED', iconBg: '#FED7AA' },

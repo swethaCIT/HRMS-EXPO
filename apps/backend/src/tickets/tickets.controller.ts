@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { TicketsService } from './tickets.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
@@ -21,8 +21,8 @@ export class TicketsController {
   }
 
   @Get()
-  findAll() {
-    return this.ticketsService.findAll();
+  findAll(@Query('limit') limit?: string, @Query('offset') offset?: string) {
+    return this.ticketsService.findAll(limit ? +limit : undefined, offset ? +offset : undefined);
   }
 
   @Get('mine')

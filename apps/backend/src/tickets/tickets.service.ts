@@ -24,8 +24,12 @@ export class TicketsService {
     return this.ticketRepo.save(ticket);
   }
 
-  findAll(): Promise<Ticket[]> {
-    return this.ticketRepo.find({ order: { createdAt: 'DESC' } });
+  findAll(limit?: number, offset?: number): Promise<Ticket[]> {
+    return this.ticketRepo.find({
+      order: { createdAt: 'DESC' },
+      take: limit && limit > 0 ? limit : undefined,
+      skip: offset && offset > 0 ? offset : undefined,
+    });
   }
 
   findMine(userId: string): Promise<Ticket[]> {

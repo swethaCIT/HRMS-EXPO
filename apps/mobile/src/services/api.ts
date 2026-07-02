@@ -68,6 +68,11 @@ export const leaveApi = {
   create: (data: any) => api.post('/leaves', data),
   getByEmployee: (employeeId: string) => api.get(`/leaves/employee/${employeeId}`),
   getAll: () => api.get('/leaves'),
+  balance: (employeeId: string) => api.get(`/leaves/balance/${employeeId}`),
+};
+
+export const analyticsApi = {
+  summary: () => api.get('/analytics/summary'),
 };
 
 export const payrollApi = {

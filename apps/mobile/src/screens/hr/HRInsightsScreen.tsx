@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, StatusBar, Dimensions,
 } from 'react-native';
@@ -7,8 +7,12 @@ import { HR_PEOPLE } from '../../data/hrData';
 import {
   T, ORG_HEADCOUNT, ATTRITION_TREND, ATTRITION_LABELS, GENDER_SPLIT,
 } from '../../data/hrData';
+import { analyticsApi } from '../../services/api';
 
 const { width } = Dimensions.get('window');
+const PALETTE = ['#4F46E5', '#EC4899', '#0EA5E9', '#10B981', '#F59E0B', '#8B5CF6', '#14B8A6', '#EF4444'];
+const withColors = (arr: { label: string; value: number }[]) =>
+  arr.map((d, i) => ({ ...d, color: PALETTE[i % PALETTE.length] }));
 
 function Donut({ data, total }: { data: { label: string; value: number; color: string }[]; total: number }) {
   const size = 140, stroke = 22, r = (size - stroke) / 2, c = 2 * Math.PI * r;
@@ -56,10 +60,17 @@ function LineChart({ values, max }: { values: number[]; max: number }) {
 }
 
 export default function HRInsightsScreen() {
-  const total = HR_PEOPLE.length;
-  const avgAtt = Math.round(HR_PEOPLE.reduce((a, p) => a + p.attendancePct, 0) / total);
-  const headTotal = ORG_HEADCOUNT.reduce((a, d) => a + d.value, 0);
-  const genderTotal = GENDER_SPLIT.reduce((a, d) => a + d.value, 0);
+  const [sum, setSum] = useState<any>(null);
+  useEffect(() => {
+    (async () => { try { const { data } = await analyticsApi.summary(); setSum(data); } catch { /* keep mock */ } })();
+  }, []);
+
+  const total = sum?.headcount ?? HR_PEOPLE.length;
+  const avgAtt = sum?.avgAttendance ?? Math.round(HR_PEOPLE.reduce((a, p) => a + p.attendancePct, 0) / HR_PEOPLE.length);
+  const orgHeadcount = sum?.headcountByDept?.length ? withColors(sum.headcountByDept) : ORG_HEADCOUNT;
+  const genderData = sum?.genderSplit?.length ? withColors(sum.genderSplit) : GENDER_SPLIT;
+  const headTotal = orgHeadcount.reduce((a: number, d: any) => a + d.value, 0) || 1;
+  const genderTotal = genderData.reduce((a: number, d: any) => a + d.value, 0) || 1;
   const attritionNow = ATTRITION_TREND[ATTRITION_TREND.length - 1];
 
   return (
@@ -103,14 +114,14 @@ export default function HRInsightsScreen() {
           <Text style={st.cardTitle}>Gender Diversity</Text>
           <View style={st.donutRow}>
             <View style={{ position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
-              <Donut data={GENDER_SPLIT} total={genderTotal} />
+              <Donut data={genderData} total={genderTotal} />
               <View style={st.donutCenter}>
                 <Text style={st.donutCenterNum}>{genderTotal}</Text>
                 <Text style={st.donutCenterLabel}>people</Text>
               </View>
             </View>
             <View style={st.legend}>
-              {GENDER_SPLIT.map((d) => (
+              {genderData.map((d) => (
                 <View key={d.label} style={st.legendRow}>
                   <View style={[st.legendDot, { backgroundColor: d.color }]} />
                   <Text style={st.legendLabel}>{d.label}</Text>
@@ -124,7 +135,7 @@ export default function HRInsightsScreen() {
         {/* headcount by department */}
         <View style={[st.card, { marginBottom: 4 }]}>
           <Text style={st.cardTitle}>Headcount by Department</Text>
-          {ORG_HEADCOUNT.map((d) => (
+          {orgHeadcount.map((d) => (
             <View key={d.label} style={st.hcRow}>
               <Text style={st.hcLabel}>{d.label}</Text>
               <View style={st.hcTrack}>

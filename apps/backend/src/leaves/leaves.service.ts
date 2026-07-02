@@ -49,4 +49,35 @@ export class LeavesService {
     leave.rejectionReason = reason;
     return this.leaveRepo.save(leave);
   }
+
+  /**
+   * Leave balance = annual allocation − approved days taken this year (auto-computed,
+   * so approving/rejecting a leave immediately reflects in the balance).
+   */
+  private static readonly ALLOCATION: Record<string, number> = {
+    annual: 12, sick: 8, casual: 6, emergency: 3, maternity: 182, paternity: 15,
+  };
+  private static readonly COUNTED = ['annual', 'sick', 'casual', 'emergency'];
+
+  async getBalance(employeeId: string) {
+    const leaves = await this.leaveRepo.find({ where: { employee: { id: employeeId } } });
+    const year = new Date().getFullYear();
+    const acc: Record<string, { used: number; pending: number }> = {};
+    for (const l of leaves) {
+      const y = new Date(l.startDate).getFullYear();
+      if (y !== year) continue;
+      const a = (acc[l.type] = acc[l.type] || { used: 0, pending: 0 });
+      const days = Number(l.totalDays) || 0;
+      if (l.status === LeaveStatus.APPROVED) a.used += days;
+      else if (l.status === LeaveStatus.PENDING) a.pending += days;
+    }
+    const byType = Object.entries(LeavesService.ALLOCATION).map(([type, allocated]) => {
+      const a = acc[type] || { used: 0, pending: 0 };
+      return { type, allocated, used: a.used, pending: a.pending, remaining: Math.max(0, allocated - a.used) };
+    });
+    const totalRemaining = byType
+      .filter((b) => LeavesService.COUNTED.includes(b.type))
+      .reduce((s, b) => s + b.remaining, 0);
+    return { year, totalRemaining, byType };
+  }
 }

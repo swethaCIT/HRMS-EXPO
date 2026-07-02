@@ -29,6 +29,11 @@ export class LeavesController {
     return this.leavesService.findByEmployee(employeeId);
   }
 
+  @Get('balance/:employeeId')
+  getBalance(@Param('employeeId') employeeId: string) {
+    return this.leavesService.getBalance(employeeId);
+  }
+
   @Patch(':id/approve')
   @Roles(UserRole.MANAGER, UserRole.HR, UserRole.ADMIN)
   approve(@Param('id') id: string, @Body('approverId') approverId: string) {

@@ -20,8 +20,13 @@ export class EmployeesService {
     return this.employeeRepo.save(employee);
   }
 
-  async findAll(): Promise<Employee[]> {
-    return this.employeeRepo.find({ relations: { user: true } });
+  async findAll(limit?: number, offset?: number): Promise<Employee[]> {
+    return this.employeeRepo.find({
+      relations: { user: true },
+      order: { employeeId: 'ASC' },
+      take: limit && limit > 0 ? limit : undefined,
+      skip: offset && offset > 0 ? offset : undefined,
+    });
   }
 
   async findOne(id: string): Promise<Employee> {

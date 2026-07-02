@@ -17,6 +17,7 @@ import { AssetsModule } from './assets/assets.module';
 import { RequestsModule } from './requests/requests.module';
 import { MailModule } from './mail/mail.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { getDatabaseConfig } from './config/database.config';
 
 @Module({
@@ -45,6 +46,7 @@ import { getDatabaseConfig } from './config/database.config';
     RequestsModule,
     MailModule,
     OnboardingModule,
+    AnalyticsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

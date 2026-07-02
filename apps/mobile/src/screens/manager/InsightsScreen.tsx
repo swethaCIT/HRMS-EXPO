@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, StatusBar, Dimensions,
 } from 'react-native';
@@ -6,8 +6,12 @@ import Svg, { Circle, Rect, G, Line } from 'react-native-svg';
 import {
   T, TEAM, ATTENDANCE_TREND, TREND_LABELS, LEAVE_SPLIT, DEPT_HEADCOUNT,
 } from '../../data/managerData';
+import { analyticsApi } from '../../services/api';
 
 const { width } = Dimensions.get('window');
+const PALETTE = ['#4F46E5', '#F59E0B', '#10B981', '#EF4444', '#EC4899', '#0EA5E9'];
+const withColors = (arr: { label: string; value: number }[]) =>
+  arr.map((d, i) => ({ ...d, color: PALETTE[i % PALETTE.length] }));
 
 /* ── Donut ── */
 function Donut({ data, total }: { data: { label: string; value: number; color: string }[]; total: number }) {
@@ -64,11 +68,20 @@ function BarChart({ values, labels }: { values: number[]; labels: string[] }) {
 }
 
 export default function InsightsScreen() {
-  const avgAtt = Math.round(TEAM.reduce((a, m) => a + m.attendancePct, 0) / TEAM.length);
+  const [sum, setSum] = useState<any>(null);
+  useEffect(() => {
+    (async () => { try { const { data } = await analyticsApi.summary(); setSum(data); } catch { /* keep mock */ } })();
+  }, []);
+
+  const avgAtt = sum?.avgAttendance ?? Math.round(TEAM.reduce((a, m) => a + m.attendancePct, 0) / TEAM.length);
   const avgUtil = Math.round(TEAM.reduce((a, m) => a + m.utilization, 0) / TEAM.length);
   const avgPerf = Math.round(TEAM.reduce((a, m) => a + m.performance, 0) / TEAM.length);
-  const leaveTotal = LEAVE_SPLIT.reduce((a, d) => a + d.value, 0);
-  const headTotal = DEPT_HEADCOUNT.reduce((a, d) => a + d.value, 0);
+  const attendanceTrend = sum?.attendanceTrend?.length ? sum.attendanceTrend : ATTENDANCE_TREND;
+  const trendLabels = sum?.attendanceLabels?.length ? sum.attendanceLabels : TREND_LABELS;
+  const leaveSplit = sum?.leaveDistribution?.length ? withColors(sum.leaveDistribution) : LEAVE_SPLIT;
+  const deptHeadcount = sum?.headcountByDept?.length ? withColors(sum.headcountByDept) : DEPT_HEADCOUNT;
+  const leaveTotal = leaveSplit.reduce((a: number, d: any) => a + d.value, 0) || 1;
+  const headTotal = deptHeadcount.reduce((a: number, d: any) => a + d.value, 0) || 1;
 
   const topPerformers = [...TEAM].sort((a, b) => b.performance - a.performance).slice(0, 3);
 
@@ -101,10 +114,10 @@ export default function InsightsScreen() {
             <Text style={st.cardTitle}>Attendance Trend</Text>
             <Text style={st.trendUp}>▲ {avgAtt}% avg</Text>
           </View>
-          <BarChart values={ATTENDANCE_TREND} labels={TREND_LABELS} />
+          <BarChart values={attendanceTrend} labels={trendLabels} />
           <View style={st.barLabels}>
-            {TREND_LABELS.map((l, i) => (
-              <Text key={i} style={[st.barLabel, i === TREND_LABELS.length - 1 && { color: T.primary, fontWeight: '700' }]}>{l}</Text>
+            {trendLabels.map((l: string, i: number) => (
+              <Text key={i} style={[st.barLabel, i === trendLabels.length - 1 && { color: T.primary, fontWeight: '700' }]}>{l}</Text>
             ))}
           </View>
         </View>
@@ -114,14 +127,14 @@ export default function InsightsScreen() {
           <Text style={st.cardTitle}>Leave Distribution</Text>
           <View style={st.donutRow}>
             <View style={{ position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
-              <Donut data={LEAVE_SPLIT} total={leaveTotal} />
+              <Donut data={leaveSplit} total={leaveTotal} />
               <View style={st.donutCenter}>
                 <Text style={st.donutCenterNum}>{leaveTotal}</Text>
                 <Text style={st.donutCenterLabel}>days</Text>
               </View>
             </View>
             <View style={st.legend}>
-              {LEAVE_SPLIT.map((d) => (
+              {leaveSplit.map((d: any) => (
                 <View key={d.label} style={st.legendRow}>
                   <View style={[st.legendDot, { backgroundColor: d.color }]} />
                   <Text style={st.legendLabel}>{d.label}</Text>
@@ -135,7 +148,7 @@ export default function InsightsScreen() {
         {/* Department headcount */}
         <View style={st.card}>
           <Text style={st.cardTitle}>Headcount by Department</Text>
-          {DEPT_HEADCOUNT.map((d) => (
+          {deptHeadcount.map((d: any) => (
             <View key={d.label} style={st.hcRow}>
               <Text style={st.hcLabel}>{d.label}</Text>
               <View style={st.hcTrack}>
