@@ -5,7 +5,31 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchNotifications, markReadLocal, markAllReadLocal } from '../../store/slices/notificationsSlice';
+import { managementKind } from '../../store/slices/authSlice';
 import { T } from '../../data/managerData';
+
+/** Where a notification takes you when tapped, based on type + the user's role. */
+function targetRoute(type: string, kind: 'admin' | 'hr' | 'manager' | null): string | null {
+  if (kind === 'manager') {
+    if (type === 'leave' || type === 'approval' || type === 'ticket') return 'Approvals';
+    if (type === 'payroll') return 'Payroll';
+    return null;
+  }
+  if (kind === 'hr') {
+    if (type === 'leave' || type === 'approval' || type === 'document') return 'Requests';
+    if (type === 'payroll') return 'Payroll';
+    return null;
+  }
+  if (kind === 'admin') {
+    if (type === 'system' || type === 'approval') return 'Users';
+    return null;
+  }
+  // employee
+  if (type === 'ticket') return 'Tickets';
+  if (type === 'payroll') return 'Payroll';
+  if (type === 'leave') return 'Leave';
+  return null;
+}
 
 const TYPE_META: Record<string, { icon: string; bg: string }> = {
   info:     { icon: 'ℹ️', bg: '#EFF6FF' },
@@ -30,9 +54,16 @@ function timeAgo(iso: string): string {
 export default function NotificationsScreen({ navigation }: any) {
   const dispatch = useDispatch<AppDispatch>();
   const { items, loading } = useSelector((s: RootState) => s.notifications);
+  const role = useSelector((s: RootState) => s.auth.user?.role);
   const unread = items.filter((i) => !i.read).length;
 
   useEffect(() => { dispatch(fetchNotifications()); }, [dispatch]);
+
+  const onTapNotification = (n: { id: string; type: string }) => {
+    dispatch(markReadLocal(n.id));
+    const route = targetRoute(n.type, managementKind(role));
+    if (route) { try { navigation?.navigate(route); } catch { /* route not in this stack */ } }
+  };
 
   return (
     <View style={st.root}>
@@ -66,7 +97,7 @@ export default function NotificationsScreen({ navigation }: any) {
               key={n.id}
               activeOpacity={0.85}
               style={[st.card, !n.read && st.cardUnread]}
-              onPress={() => dispatch(markReadLocal(n.id))}
+              onPress={() => onTapNotification(n)}
             >
               <View style={[st.icon, { backgroundColor: meta.bg }]}><Text style={{ fontSize: 16 }}>{meta.icon}</Text></View>
               <View style={{ flex: 1 }}>
