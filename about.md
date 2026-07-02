@@ -90,7 +90,22 @@ Organization-wide people operations.
 | **HR dashboard** | Org pulse (headcount, availability, departments), pending-requests summary, new joiners, celebrations (birthdays/anniversaries) |
 | **Requests inbox** | Employee requests — **document/letter, profile change, onboarding, leave**; Issue/Approve or Reject; process-all; status tabs |
 | **People directory** | Full company directory pulled from the database, department filters, search |
+| **Employee onboarding** | Invite and onboard a **new hire before they join** — HR sends a one-time invite; the candidate self-registers and fills their own details; on completion the employee is provisioned a permanent company email + employee ID (full workflow in §5.1) |
 | **Org insights** | Attrition trend, gender-diversity donut, headcount by department |
+
+#### 5.1 Employee onboarding workflow (new-hire invite & self-registration)
+
+A guided flow that lets HR onboard employees **who have not yet joined the company**, and shifts data entry to the employee themselves:
+
+1. **HR initiates onboarding** for a new hire by entering a **temporary employee ID** and the candidate's **personal email address**.
+2. The system **emails the candidate** a secure **one-time registration invite** (a one-time link / OTP tied to that personal email).
+3. The candidate uses that **one-time credential to register** and **fill in their own details** — personal information, address, emergency contact, bank & statutory details, and documents.
+4. **HR reviews and confirms** the submitted information.
+5. On completion, the employee is **provisioned their permanent company email and official employee ID**, and their temporary invite converts into a normal, active employee login.
+
+**Value:** removes repetitive HR data-entry, captures accurate data directly from the employee, and uses a secure credential that **expires after registration** (one-time use). It plugs directly into the existing People directory, Profile record, and Requests inbox.
+
+> **Status:** the onboarding **request type and HR inbox handling are in place**; the full invite-email + one-time self-registration + auto-provisioning flow is the **next build item** (see §11 roadmap).
 
 ### 4.4 Admin
 System administration and access control.
@@ -181,6 +196,7 @@ Auto-documented via Swagger. Major endpoint groups:
 | **Supabase Storage** | Configured — ready for document/photo upload |
 | **Biometric punch machine / geofenced attendance** | Data model ready (attendance records carry a "source" so machine/GPS punches can be added without rework) |
 | **Firebase push notifications (FCM)** | Integration-ready (turns on with Firebase credentials) |
+| **Transactional email (onboarding invites, OTP)** | Planned — powers the new-hire onboarding invite & one-time registration (§5.1) |
 | **Azure storage** | Placeholder for future migration |
 
 ---
@@ -192,6 +208,7 @@ Auto-documented via Swagger. Major endpoint groups:
 **Built and polished, currently shown with representative data** (backend can be connected next): some dashboard analytics/insight charts, timesheet weekly grid, parts of the payslip breakdown, and HR document templates.
 
 **Planned next (roadmap — future value):**
+- **Employee onboarding — full new-hire invite & self-registration** (HR sends a one-time email invite with a temporary employee ID → candidate self-registers and fills their details → auto-provision permanent company email + employee ID). *(See §5.1.)*
 - Finish connecting all analytics to live data; list pagination.
 - Leave-balance accrual, forgot/reset password, live push notifications.
 - Audit log, org chart, performance reviews, holiday calendar, payroll run generation, reports/exports.
