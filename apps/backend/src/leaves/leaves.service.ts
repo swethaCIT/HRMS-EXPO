@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { Leave, LeaveStatus } from './entities/leave.entity';
 import { CreateLeaveDto } from './dto/create-leave.dto';
 
@@ -9,7 +11,12 @@ export class LeavesService {
   constructor(
     @InjectRepository(Leave)
     private readonly leaveRepo: Repository<Leave>,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
+
+  private balanceKey(employeeId: string) {
+    return `leaves:balance:${employeeId}`;
+  }
 
   async create(dto: CreateLeaveDto): Promise<Leave> {
     const start = new Date(dto.startDate);
@@ -23,7 +30,9 @@ export class LeavesService {
       endDate: end,
       totalDays,
     });
-    return this.leaveRepo.save(leave);
+    const saved = await this.leaveRepo.save(leave);
+    await this.cache.del(this.balanceKey(dto.employeeId));
+    return saved;
   }
 
   async findAll(): Promise<Leave[]> {
@@ -35,19 +44,23 @@ export class LeavesService {
   }
 
   async approve(id: string, approverId: string): Promise<Leave> {
-    const leave = await this.leaveRepo.findOne({ where: { id } });
+    const leave = await this.leaveRepo.findOne({ where: { id }, relations: { employee: true } });
     if (!leave) throw new NotFoundException('Leave not found');
     leave.status = LeaveStatus.APPROVED;
     leave.approvedById = approverId;
-    return this.leaveRepo.save(leave);
+    const saved = await this.leaveRepo.save(leave);
+    if (leave.employee?.id) await this.cache.del(this.balanceKey(leave.employee.id));
+    return saved;
   }
 
   async reject(id: string, reason: string): Promise<Leave> {
-    const leave = await this.leaveRepo.findOne({ where: { id } });
+    const leave = await this.leaveRepo.findOne({ where: { id }, relations: { employee: true } });
     if (!leave) throw new NotFoundException('Leave not found');
     leave.status = LeaveStatus.REJECTED;
     leave.rejectionReason = reason;
-    return this.leaveRepo.save(leave);
+    const saved = await this.leaveRepo.save(leave);
+    if (leave.employee?.id) await this.cache.del(this.balanceKey(leave.employee.id));
+    return saved;
   }
 
   /**
@@ -60,6 +73,9 @@ export class LeavesService {
   private static readonly COUNTED = ['annual', 'sick', 'casual', 'emergency'];
 
   async getBalance(employeeId: string) {
+    const key = this.balanceKey(employeeId);
+    const cached = await this.cache.get(key);
+    if (cached) return cached;
     const leaves = await this.leaveRepo.find({ where: { employee: { id: employeeId } } });
     const year = new Date().getFullYear();
     const acc: Record<string, { used: number; pending: number }> = {};
@@ -78,6 +94,8 @@ export class LeavesService {
     const totalRemaining = byType
       .filter((b) => LeavesService.COUNTED.includes(b.type))
       .reduce((s, b) => s + b.remaining, 0);
-    return { year, totalRemaining, byType };
+    const result = { year, totalRemaining, byType };
+    await this.cache.set(key, result, 30_000); // balance changes only on approve/reject
+    return result;
   }
 }

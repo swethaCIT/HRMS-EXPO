@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { Employee } from './entities/employee.entity';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -11,6 +13,7 @@ export class EmployeesService {
   constructor(
     @InjectRepository(Employee)
     private readonly employeeRepo: Repository<Employee>,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
   async create(dto: CreateEmployeeDto): Promise<Employee> {
@@ -21,14 +24,22 @@ export class EmployeesService {
     return this.employeeRepo.save(employee);
   }
 
+  // The directory is identical for every viewer and changes rarely, so a short
+  // cache absorbs the read-heavy list traffic instead of round-tripping the DB
+  // on every request. Bounded 15s TTL keeps it fresh enough for a headcount list.
   async findAll(limit?: number, offset?: number): Promise<Employee[]> {
     const { take, skip } = clampPaging(limit, offset);
-    return this.employeeRepo.find({
+    const key = `employees:list:${take}:${skip}`;
+    const cached = await this.cache.get<Employee[]>(key);
+    if (cached) return cached;
+    const rows = await this.employeeRepo.find({
       relations: { user: true },
       order: { employeeId: 'ASC' },
       take,
       skip,
     });
+    await this.cache.set(key, rows, 15_000);
+    return rows;
   }
 
   async findOne(id: string): Promise<Employee> {

@@ -13,7 +13,7 @@ export const getDatabaseConfig = (config: ConfigService): TypeOrmModuleOptions =
   // Pool size per app instance. Supabase's transaction pooler (port 6543) allows
   // many client connections, so this can be raised via env. Keep it modest per
   // instance so N instances don't collectively exhaust the database.
-  const poolMax = Number(config.get('DB_POOL_MAX')) || 10;
+  const poolMax = Number(config.get('DB_POOL_MAX')) || 20;
 
   const base = {
     type: 'postgres' as const,

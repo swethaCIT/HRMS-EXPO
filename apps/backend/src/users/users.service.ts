@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -11,6 +13,7 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
   async create(dto: CreateUserDto): Promise<User> {
@@ -39,6 +42,9 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto): Promise<User> {
     await this.findOne(id);
     await this.userRepo.update(id, dto);
+    // Drop the cached auth record so role/isActive changes apply on the next
+    // request instead of waiting out the JwtStrategy TTL.
+    await this.cache.del(`auth:user:${id}`);
     return this.findOne(id);
   }
 
@@ -59,5 +65,6 @@ export class UsersService {
   async remove(id: string): Promise<void> {
     await this.findOne(id);
     await this.userRepo.softDelete(id);
+    await this.cache.del(`auth:user:${id}`);
   }
 }
