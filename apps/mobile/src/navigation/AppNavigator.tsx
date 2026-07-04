@@ -5,7 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../store';
-import { isManagerRole, managementKind, restoreSession } from '../store/slices/authSlice';
+import { managementKind, restoreSession } from '../store/slices/authSlice';
 
 import LoginScreen      from '../screens/auth/LoginScreen';
 import DashboardScreen  from '../screens/dashboard/DashboardScreen';
@@ -67,11 +67,16 @@ function TabIcon({ name, focused, badge }: { name: string; focused: boolean; bad
   );
 }
 
-/* ── Leaf (pushed) screens shared by every tab so the bottom bar stays visible ── */
+/* ── Leaf (pushed) screens shared by every tab so the bottom bar stays visible ──
+ * These are reachable from ANY role's tabs, so managers/HR/admin can self-serve
+ * (apply leave, raise a ticket, view payslip) without switching to a separate
+ * "employee view" — the dashboards are unified. */
 const LEAF_SCREENS: [string, React.ComponentType<any>][] = [
   ['Assets', AssetsScreen],
   ['Payroll', PayrollScreen],
   ['Timesheet', AttendanceScreen],
+  ['ApplyLeave', LeavesScreen],
+  ['MyTickets', TicketsScreen],
   ['RaiseTicket', RaiseTicketScreen],
   ['TicketDetail', TicketDetailScreen],
   ['TeamMember', TeamMemberDetailScreen],
@@ -192,7 +197,7 @@ function AdminTabs() {
 
 export default function AppNavigator() {
   const dispatch = useDispatch<AppDispatch>();
-  const { token, user, viewMode, booting } = useSelector((state: RootState) => state.auth);
+  const { token, user, booting } = useSelector((state: RootState) => state.auth);
 
   // Restore a saved session on launch (persistent login).
   useEffect(() => { dispatch(restoreSession()); }, [dispatch]);
@@ -206,16 +211,17 @@ export default function AppNavigator() {
     );
   }
 
-  const inManagementView = isManagerRole(user?.role) && viewMode === 'manager';
+  // Each role gets ONE unified dashboard chosen purely by role — no employee/
+  // manager view switching. Managers/HR/admin self-serve via leaf screens.
   const kind = managementKind(user?.role); // 'admin' | 'hr' | 'manager' | null
-
-  const MainTabs = !inManagementView
-    ? EmployeeTabs
-    : kind === 'admin'
+  const MainTabs =
+    kind === 'admin'
       ? AdminTabs
       : kind === 'hr'
         ? HRTabs
-        : ManagerTabs;
+        : kind === 'manager'
+          ? ManagerTabs
+          : EmployeeTabs;
 
   return (
     <NavigationContainer>

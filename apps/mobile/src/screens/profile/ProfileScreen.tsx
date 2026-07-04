@@ -1,10 +1,10 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Switch, Alert, Linking,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, Linking,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
-import { logout, toggleViewMode, isManagerRole, managementKind } from '../../store/slices/authSlice';
+import { logout } from '../../store/slices/authSlice';
 import { T, initialsOf } from '../../data/managerData';
 import Icon, { IconName } from '../../components/Icon';
 
@@ -30,15 +30,12 @@ function tenure(d?: string) {
 }
 
 export default function ProfileScreen({ navigation }: any) {
-  const { user, employee, viewMode } = useSelector((s: RootState) => s.auth);
+  const { user, employee } = useSelector((s: RootState) => s.auth);
   const dispatch = useDispatch<AppDispatch>();
 
   const fullName = employee
     ? `${employee.firstName ?? ''} ${employee.lastName ?? ''}`.trim()
     : (user?.email?.split('@')[0] || 'User').replace(/\./g, ' ');
-  const canManage = isManagerRole(user?.role);
-  const kind = managementKind(user?.role); // 'admin' | 'hr' | 'manager' | null
-  const viewLabel = kind === 'admin' ? 'Admin view' : kind === 'hr' ? 'HR view' : 'Manager view';
   const statusActive = (employee?.status ?? 'active') === 'active';
 
   const soon = (what: string) => Alert.alert(what, 'This section is coming soon.');
@@ -103,22 +100,6 @@ export default function ProfileScreen({ navigation }: any) {
       </View>
 
       <ScrollView style={st.body} contentContainerStyle={{ padding: 16, paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
-        {/* view switch (managers) */}
-        {canManage && (
-          <View style={st.switchCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={st.switchTitle}>{viewLabel}</Text>
-              <Text style={st.switchSub}>Switch between your {kind === 'manager' ? 'team' : 'organization'} dashboard and your personal employee view.</Text>
-            </View>
-            <Switch
-              value={viewMode === 'manager'}
-              onValueChange={() => { dispatch(toggleViewMode()); }}
-              trackColor={{ false: '#E5E7EB', true: '#C7D2FE' }}
-              thumbColor={viewMode === 'manager' ? T.primary : '#F9FAFB'}
-            />
-          </View>
-        )}
-
         {/* Employment */}
         <Text style={st.sectionTitle}>EMPLOYMENT</Text>
         <View style={st.card}>

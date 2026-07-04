@@ -74,7 +74,7 @@ const ATTENDANCE: Record<string, 'present' | 'leave' | 'wfh'> = {
 };
 
 /* ════════════════════════════════════════════════ */
-export default function LeavesScreen() {
+export default function LeavesScreen({ navigation }: any) {
   const employee = useSelector((st: RootState) => st.auth.employee);
   const today = new Date();
   const [year, setYear]           = useState(today.getFullYear());
@@ -136,9 +136,13 @@ export default function LeavesScreen() {
 
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity style={s.backBtn}>
-          <Text style={s.backArrow}>←</Text>
-        </TouchableOpacity>
+        {navigation?.canGoBack?.() ? (
+          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={s.backArrow}>←</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={s.backBtn} />
+        )}
         <Text style={s.headerTitle}>Leave</Text>
         <Text style={s.headerRight}>Report</Text>
       </View>

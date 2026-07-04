@@ -150,7 +150,7 @@ const INITIAL_REG: RegRequest[] = [
 ];
 
 /* ════════════════════════════════════════════════════════ */
-export default function AttendanceScreen() {
+export default function AttendanceScreen({ navigation }: any) {
   const today = new Date();
   const [activeTab, setActiveTab] = useState<'attendance' | 'regularization'>('attendance');
   const [viewMode, setViewMode]   = useState<'weekly' | 'monthly' | 'quarterly'>('weekly');
@@ -206,13 +206,19 @@ export default function AttendanceScreen() {
 
       {/* ── Header ── */}
       <View style={s.header}>
-        <Text style={s.headerTitle}>Timesheet</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+          {navigation?.canGoBack?.() && (
+            <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={s.headerBack}>←</Text>
+            </TouchableOpacity>
+          )}
+          <Text style={s.headerTitle}>Timesheet</Text>
+        </View>
         <View style={s.headerIcons}>
-          <TouchableOpacity style={s.bellWrap}>
+          <TouchableOpacity style={s.bellWrap} onPress={() => navigation?.navigate('Notifications')}>
             <Text style={{ fontSize: 18 }}>🔔</Text>
             <View style={s.bellDot} />
           </TouchableOpacity>
-          <View style={s.avatar}><Text style={s.avatarText}>AD</Text></View>
         </View>
       </View>
 
@@ -562,6 +568,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#FFF' },
+  headerBack: { fontSize: 26, color: '#FFF', fontWeight: '600' },
   headerIcons: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   bellWrap: {
     width: 36, height: 36, borderRadius: 18,

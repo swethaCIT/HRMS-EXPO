@@ -4,7 +4,6 @@ import {
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
-import { toggleViewMode } from '../../store/slices/authSlice';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
 import { fetchApprovals } from '../../store/slices/approvalsSlice';
 import {
@@ -68,12 +67,6 @@ export default function ManagerDashboardScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* manager / employee view switch */}
-        <TouchableOpacity style={st.switchPill} activeOpacity={0.8} onPress={() => dispatch(toggleViewMode())}>
-          <Text style={st.switchTx}>🧭  Manager view</Text>
-          <Text style={st.switchAction}>Switch to my view ›</Text>
-        </TouchableOpacity>
       </View>
 
       <ScrollView style={st.body} contentContainerStyle={st.bodyC} showsVerticalScrollIndicator={false}>
@@ -169,6 +162,24 @@ export default function ManagerDashboardScreen({ navigation }: any) {
               <TouchableOpacity key={q.l} style={st.quickChip} activeOpacity={0.85} onPress={() => navigation?.navigate(q.go)}>
                 <Text style={st.quickEmoji}>{q.e}</Text>
                 <Text style={st.quickLabel}>{q.l}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* ── My workspace (self-service — no view switching needed) ── */}
+        <View style={st.section}>
+          <Text style={st.sectionTitle}>MY WORKSPACE</Text>
+          <View style={st.quickRow}>
+            {[
+              { e: '🏖️', l: 'Apply Leave',  go: 'ApplyLeave' },
+              { e: '🎫', l: 'Raise Ticket', go: 'RaiseTicket' },
+              { e: '💰', l: 'Payslip',      go: 'Payroll' },
+              { e: '🕒', l: 'Timesheet',    go: 'Timesheet' },
+            ].map((q) => (
+              <TouchableOpacity key={q.l} style={st.quickChip} activeOpacity={0.85} onPress={() => navigation?.navigate(q.go)}>
+                <Text style={st.quickEmoji}>{q.e}</Text>
+                <Text style={st.quickLabelSm}>{q.l}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -274,6 +285,7 @@ const st = StyleSheet.create({
   quickChip: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: T.card, borderRadius: 12, paddingVertical: 14, gap: 6, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   quickEmoji: { fontSize: 16 },
   quickLabel: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  quickLabelSm: { fontSize: 10.5, fontWeight: '600', color: '#374151', textAlign: 'center' },
 
   awayRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   awayDivider: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },

@@ -105,6 +105,8 @@ export interface ApprovalItem {
   detail: { k: string; v: string }[];
   /** Present when this item is backed by a real DB leave row (enables real approve/reject). */
   leaveId?: string;
+  /** Present when this item is backed by a real DB ticket row (enables real approve/reject). */
+  ticketId?: string;
 }
 
 export const APPROVALS_SEED: ApprovalItem[] = [

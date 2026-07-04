@@ -1,9 +1,10 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = __DEV__
-  ? 'http://10.0.2.2:3000/api/v1'  // Android emulator → localhost
-  : 'https://your-production-url.com/api/v1';
+// `10.0.2.2` is the Android emulator's alias for the host machine's localhost,
+// so this reaches the backend on the host at :3000 in both debug and release
+// builds on the emulator. Swap to the real API host once the backend is deployed.
+const BASE_URL = 'http://10.0.2.2:3000/api/v1';
 
 const api = axios.create({ baseURL: BASE_URL, timeout: 10000 });
 

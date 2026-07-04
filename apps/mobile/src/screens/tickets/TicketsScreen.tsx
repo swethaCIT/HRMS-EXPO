@@ -140,11 +140,17 @@ export default function TicketsScreen({ navigation, route }: any) {
 
       {/* ── Header ── */}
       <View style={s.header}>
-        <View>
-          <Text style={s.headerTitle}>Tickets</Text>
-          <Text style={s.headerSub}>{tickets.length} total · {counts.open + counts.progress} active</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+          {navigation?.canGoBack?.() && (
+            <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={s.headerBack}>←</Text>
+            </TouchableOpacity>
+          )}
+          <View>
+            <Text style={s.headerTitle}>Tickets</Text>
+            <Text style={s.headerSub}>{tickets.length} total · {counts.open + counts.progress} active</Text>
+          </View>
         </View>
-        <View style={s.avatar}><Text style={s.avatarText}>AD</Text></View>
       </View>
 
       {/* ── Stat strip ── */}
@@ -266,6 +272,7 @@ const s = StyleSheet.create({
   },
   headerTitle: { fontSize: 22, fontWeight: '700', color: '#FFF' },
   headerSub:   { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
+  headerBack:  { fontSize: 26, color: '#FFF', fontWeight: '600' },
   avatar:      { width: 36, height: 36, borderRadius: 18, backgroundColor: '#4F46E5', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
   avatarText:  { color: '#FFF', fontWeight: '700', fontSize: 12 },
 
