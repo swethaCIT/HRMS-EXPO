@@ -110,11 +110,14 @@ const approvalsSlice = createSlice({
       if (it.leaveId) leaveApprovalApi.approve(it.leaveId).catch(() => {});
       if (it.ticketId) ticketApi.approve(it.ticketId).catch(() => {});
     },
-    reject: (state, action: PayloadAction<string>) => {
-      const it = state.items.find((i) => i.id === action.payload);
+    reject: (state, action: PayloadAction<string | { id: string; reason?: string }>) => {
+      const id = typeof action.payload === 'string' ? action.payload : action.payload.id;
+      const reason = typeof action.payload === 'string' ? undefined : action.payload.reason;
+      const it = state.items.find((i) => i.id === id);
       if (!it) return;
       it.status = 'rejected';
-      if (it.leaveId) leaveApprovalApi.reject(it.leaveId).catch(() => {});
+      if (it.reason == null && reason) it.reason = reason;
+      if (it.leaveId) leaveApprovalApi.reject(it.leaveId, reason).catch(() => {});
       if (it.ticketId) ticketApi.reject(it.ticketId).catch(() => {});
     },
     approveAllPending: (state) => {

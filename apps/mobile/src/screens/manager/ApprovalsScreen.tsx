@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, LayoutAnimation, Platform, UIManager,
+  RefreshControl, Modal, TextInput,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
@@ -25,9 +26,18 @@ export default function ApprovalsScreen({ navigation }: any) {
   const items = useSelector((s: RootState) => s.approvals.items);
   const [tab, setTab] = useState<Tab>('pending');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [rejecting, setRejecting] = useState<string | null>(null); // item id being rejected
+  const [rejectReason, setRejectReason] = useState('');
 
-  // Pull real pending leaves from the DB into the inbox.
+  // Pull real pending leaves + tickets from the DB into the inbox.
   useEffect(() => { dispatch(fetchApprovals()); }, [dispatch]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await dispatch(fetchApprovals());
+    setRefreshing(false);
+  }, [dispatch]);
 
   const counts: Record<Tab, number> = {
     pending: items.filter((i) => i.status === 'pending').length,
@@ -39,11 +49,15 @@ export default function ApprovalsScreen({ navigation }: any) {
   const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
   const onApprove = (id: string) => { animate(); dispatch(approve(id)); };
-  const onReject = (id: string) =>
-    Alert.alert('Reject request', 'Are you sure you want to reject this request?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Reject', style: 'destructive', onPress: () => { animate(); dispatch(reject(id)); } },
-    ]);
+  const onReject = (id: string) => { setRejectReason(''); setRejecting(id); };
+  const confirmReject = () => {
+    if (!rejecting) return;
+    const id = rejecting;
+    const reason = rejectReason.trim();
+    setRejecting(null);
+    animate();
+    dispatch(reject({ id, reason: reason || undefined }));
+  };
   const onApproveAll = () => {
     if (!counts.pending) return;
     Alert.alert('Approve all', `Approve all ${counts.pending} pending requests?`, [
@@ -88,7 +102,12 @@ export default function ApprovalsScreen({ navigation }: any) {
         </View>
       </View>
 
-      <ScrollView style={st.body} contentContainerStyle={{ padding: 16, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={st.body}
+        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} colors={[T.primary]} />}
+      >
         {visible.length === 0 && (
           <View style={st.empty}>
             <Text style={{ fontSize: 40 }}>{tab === 'pending' ? '🎉' : '📭'}</Text>
@@ -165,6 +184,32 @@ export default function ApprovalsScreen({ navigation }: any) {
           );
         })}
       </ScrollView>
+
+      {/* ── Reject with reason ── */}
+      <Modal visible={!!rejecting} transparent animationType="fade" onRequestClose={() => setRejecting(null)}>
+        <View style={st.modalOverlay}>
+          <View style={st.modalCard}>
+            <Text style={st.modalTitle}>Reject request</Text>
+            <Text style={st.modalSub}>Add an optional reason — the employee will be notified.</Text>
+            <TextInput
+              style={st.modalInput}
+              placeholder="Reason (optional)"
+              placeholderTextColor={T.faint}
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              multiline
+            />
+            <View style={st.modalActions}>
+              <TouchableOpacity style={[st.modalBtn, st.modalCancel]} onPress={() => setRejecting(null)}>
+                <Text style={st.modalCancelTx}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[st.modalBtn, st.modalReject]} onPress={confirmReject}>
+                <Text style={st.modalRejectTx}>Reject</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -227,4 +272,16 @@ const st = StyleSheet.create({
 
   empty: { alignItems: 'center', paddingTop: 80, gap: 12 },
   emptyTx: { fontSize: 14, color: T.faint, fontWeight: '500', textAlign: 'center', paddingHorizontal: 40 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(17,24,39,0.55)', justifyContent: 'center', paddingHorizontal: 24 },
+  modalCard: { backgroundColor: T.card, borderRadius: 18, padding: 20 },
+  modalTitle: { fontSize: 17, fontWeight: '800', color: T.ink },
+  modalSub: { fontSize: 12.5, color: T.sub, marginTop: 4, marginBottom: 14, lineHeight: 18 },
+  modalInput: { minHeight: 76, borderWidth: 1, borderColor: T.line, borderRadius: 12, padding: 12, fontSize: 14, color: T.ink, textAlignVertical: 'top', backgroundColor: '#F9FAFB' },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  modalBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
+  modalCancel: { backgroundColor: '#F3F4F6' },
+  modalCancelTx: { color: T.ink, fontWeight: '700', fontSize: 14 },
+  modalReject: { backgroundColor: '#DC2626' },
+  modalRejectTx: { color: '#FFF', fontWeight: '700', fontSize: 14 },
 });

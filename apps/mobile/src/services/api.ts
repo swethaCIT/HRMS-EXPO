@@ -83,7 +83,7 @@ export const payrollApi = {
 
 export const leaveApprovalApi = {
   approve: (id: string) => api.patch(`/leaves/${id}/approve`),
-  reject: (id: string) => api.patch(`/leaves/${id}/reject`),
+  reject: (id: string, reason?: string) => api.patch(`/leaves/${id}/reject`, { reason }),
 };
 
 export const notificationApi = {

@@ -1,21 +1,30 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { Leave, LeaveStatus } from './entities/leave.entity';
 import { CreateLeaveDto } from './dto/create-leave.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
 
 @Injectable()
 export class LeavesService {
+  private readonly logger = new Logger(LeavesService.name);
+
   constructor(
     @InjectRepository(Leave)
     private readonly leaveRepo: Repository<Leave>,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private balanceKey(employeeId: string) {
     return `leaves:balance:${employeeId}`;
+  }
+
+  private fmtDate(d: Date | string): string {
+    return new Date(d).toISOString().slice(0, 10);
   }
 
   async create(dto: CreateLeaveDto): Promise<Leave> {
@@ -44,23 +53,45 @@ export class LeavesService {
   }
 
   async approve(id: string, approverId: string): Promise<Leave> {
-    const leave = await this.leaveRepo.findOne({ where: { id }, relations: { employee: true } });
+    const leave = await this.leaveRepo.findOne({ where: { id }, relations: { employee: { user: true } } });
     if (!leave) throw new NotFoundException('Leave not found');
     leave.status = LeaveStatus.APPROVED;
     leave.approvedById = approverId;
     const saved = await this.leaveRepo.save(leave);
     if (leave.employee?.id) await this.cache.del(this.balanceKey(leave.employee.id));
+    await this.notify(
+      leave,
+      'Leave approved',
+      `Your ${leave.type} leave (${this.fmtDate(leave.startDate)} to ${this.fmtDate(leave.endDate)}) has been approved.`,
+    );
     return saved;
   }
 
   async reject(id: string, reason: string): Promise<Leave> {
-    const leave = await this.leaveRepo.findOne({ where: { id }, relations: { employee: true } });
+    const leave = await this.leaveRepo.findOne({ where: { id }, relations: { employee: { user: true } } });
     if (!leave) throw new NotFoundException('Leave not found');
     leave.status = LeaveStatus.REJECTED;
     leave.rejectionReason = reason;
     const saved = await this.leaveRepo.save(leave);
     if (leave.employee?.id) await this.cache.del(this.balanceKey(leave.employee.id));
+    await this.notify(
+      leave,
+      'Leave rejected',
+      `Your ${leave.type} leave (${this.fmtDate(leave.startDate)} to ${this.fmtDate(leave.endDate)}) has been rejected.` +
+        (reason ? ` Reason: ${reason}` : ''),
+    );
     return saved;
+  }
+
+  /** Notify the employee who submitted the leave. Never breaks the approve/reject flow. */
+  private async notify(leave: Leave, title: string, body: string): Promise<void> {
+    try {
+      const userId = leave.employee?.user?.id;
+      if (!userId) return;
+      await this.notifications.createForUser(userId, title, body, NotificationType.LEAVE);
+    } catch (err: any) {
+      this.logger.error(`Failed to create leave notification: ${err?.message}`);
+    }
   }
 
   /**

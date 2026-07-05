@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -6,13 +6,18 @@ import type { Cache } from 'cache-manager';
 import { Ticket } from './entities/ticket.entity';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { clampPaging } from '../common/utils/pagination';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
 
 @Injectable()
 export class TicketsService {
+  private readonly logger = new Logger(TicketsService.name);
+
   constructor(
     @InjectRepository(Ticket)
     private readonly ticketRepo: Repository<Ticket>,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private mineKey(userId: string) {
@@ -61,6 +66,11 @@ export class TicketsService {
     if (status) ticket.status = status;
     const saved = await this.ticketRepo.save(ticket);
     if (ticket.createdById) await this.cache.del(this.mineKey(ticket.createdById));
+    if (approval === 'Approved') {
+      await this.notify(ticket, 'Ticket approved', `Your ticket ${ticket.ticketId} — "${ticket.subject}" has been approved.`);
+    } else if (approval === 'Rejected') {
+      await this.notify(ticket, 'Ticket rejected', `Your ticket ${ticket.ticketId} — "${ticket.subject}" has been rejected.`);
+    }
     return saved;
   }
 
@@ -70,6 +80,16 @@ export class TicketsService {
 
   reject(id: string) {
     return this.setApproval(id, 'Rejected', 'Closed');
+  }
+
+  /** Notify the user who created the ticket. Never breaks the approve/reject flow. */
+  private async notify(ticket: Ticket, title: string, body: string): Promise<void> {
+    try {
+      if (!ticket.createdById) return;
+      await this.notifications.createForUser(ticket.createdById, title, body, NotificationType.TICKET);
+    } catch (err: any) {
+      this.logger.error(`Failed to create ticket notification: ${err?.message}`);
+    }
   }
 
   async updateStatus(id: string, status: string): Promise<Ticket> {
