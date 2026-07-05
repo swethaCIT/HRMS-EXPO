@@ -30,6 +30,20 @@ if (-not (Test-Path (Join-Path $backendDir ".env"))) {
   exit 1
 }
 
+# --- Sanity check: some native Android modules (gesture-handler, screens, svg,
+#     safe-area-context) generate build paths long enough to exceed Windows'
+#     260-character path limit once combined with a deep repo path (a folder
+#     nested under OneDrive\Desktop\... is a common way to hit this). Ninja
+#     fails with a cryptic "Filename longer than 260 characters" late into the
+#     build when that happens - warn up front instead. ---
+if ($root.Length -gt 40) {
+  Write-Host "WARNING: this repo is checked out at a long path ($($root.Length) chars):" -ForegroundColor Yellow
+  Write-Host "  $root" -ForegroundColor Yellow
+  Write-Host "  The Android native build can fail with 'Filename longer than 260 characters'" -ForegroundColor Yellow
+  Write-Host "  on paths this deep. If the Gradle step below fails that way, move the repo" -ForegroundColor Yellow
+  Write-Host "  to a short path (e.g. C:\HRMS) and run this script from there instead." -ForegroundColor Yellow
+}
+
 # --- 0. Dependencies (npm workspaces: always install from the repo root, so a
 #        package.json change anywhere is picked up - a merely-present
 #        node_modules folder can still be missing packages added since the
