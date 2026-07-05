@@ -21,7 +21,10 @@ export class Request {
   @Column({ nullable: true })
   meta: string;
 
-  @Column()
+  // Nullable as a safety net: the service resolves this from the requester's
+  // employee record, but a user with no employee row (e.g. a bare admin
+  // account) must not crash the insert with a NOT NULL violation.
+  @Column({ nullable: true })
   employeeName: string;
 
   @Column({ nullable: true })

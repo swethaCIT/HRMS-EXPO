@@ -117,9 +117,13 @@ async function main() {
       user = await userRepo.save(userRepo.create({ email: p.email, password: hashed, role: p.role, isActive: true }));
       console.log(`✅ user ${p.email} (${p.role})`);
     } else {
-      // keep role in sync with the seed definition
-      if (user.role !== p.role) { user.role = p.role; await userRepo.save(user); }
-      console.log(`ℹ️  user ${p.email} exists`);
+      // Keep role in sync and guarantee these demo logins are always usable —
+      // a disabled seed account would otherwise silently lock the demo out.
+      let dirty = false;
+      if (user.role !== p.role) { user.role = p.role; dirty = true; }
+      if (!user.isActive) { user.isActive = true; dirty = true; }
+      if (dirty) await userRepo.save(user);
+      console.log(`ℹ️  user ${p.email} exists${dirty ? ' (re-synced role/active)' : ''}`);
     }
 
     let emp = await employeeRepo.findOne({ where: { employeeId: p.employeeId } });

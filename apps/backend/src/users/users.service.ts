@@ -1,10 +1,10 @@
-import { Injectable, NotFoundException, ConflictException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import * as bcrypt from 'bcrypt';
-import { User } from './entities/user.entity';
+import { User, UserRole } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -39,8 +39,22 @@ export class UsersService {
     return this.userRepo.findOne({ where: { email } });
   }
 
+  /** True if `user` is the only remaining active admin — demoting/deactivating
+   * them would leave nobody able to manage users (this endpoint is admin-only),
+   * a permanent lockout with no way back in except a manual DB fix. */
+  private async isLastActiveAdmin(user: User): Promise<boolean> {
+    if (user.role !== UserRole.ADMIN || !user.isActive) return false;
+    const otherActiveAdmins = await this.userRepo.count({ where: { role: UserRole.ADMIN, isActive: true } });
+    return otherActiveAdmins <= 1;
+  }
+
   async update(id: string, dto: UpdateUserDto): Promise<User> {
-    await this.findOne(id);
+    const current = await this.findOne(id);
+    const demoting = dto.role !== undefined && dto.role !== UserRole.ADMIN;
+    const deactivating = dto.isActive === false;
+    if ((demoting || deactivating) && (await this.isLastActiveAdmin(current))) {
+      throw new BadRequestException('Cannot demote or deactivate the last active admin — promote another user to admin first.');
+    }
     await this.userRepo.update(id, dto);
     // Drop the cached auth record so role/isActive changes apply on the next
     // request instead of waiting out the JwtStrategy TTL.
@@ -63,7 +77,10 @@ export class UsersService {
   }
 
   async remove(id: string): Promise<void> {
-    await this.findOne(id);
+    const current = await this.findOne(id);
+    if (await this.isLastActiveAdmin(current)) {
+      throw new BadRequestException('Cannot remove the last active admin — promote another user to admin first.');
+    }
     await this.userRepo.softDelete(id);
     await this.cache.del(`auth:user:${id}`);
   }
