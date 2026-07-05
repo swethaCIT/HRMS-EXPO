@@ -32,6 +32,9 @@ import HRInsightsScreen  from '../screens/hr/HRInsightsScreen';
 import AdminDashboardScreen  from '../screens/admin/AdminDashboardScreen';
 import UserManagementScreen  from '../screens/admin/UserManagementScreen';
 import NotificationsScreen   from '../screens/common/NotificationsScreen';
+import HolidaysScreen        from '../screens/common/HolidaysScreen';
+import AnnouncementsScreen   from '../screens/common/AnnouncementsScreen';
+import DocumentsScreen       from '../screens/common/DocumentsScreen';
 import Icon, { IconName }    from '../components/Icon';
 import ForgotPasswordScreen     from '../screens/auth/ForgotPasswordScreen';
 import OnboardingRegisterScreen from '../screens/auth/OnboardingRegisterScreen';
@@ -81,6 +84,9 @@ const LEAF_SCREENS: [string, React.ComponentType<any>][] = [
   ['TicketDetail', TicketDetailScreen],
   ['TeamMember', TeamMemberDetailScreen],
   ['Notifications', NotificationsScreen],
+  ['Holidays', HolidaysScreen],
+  ['Announcements', AnnouncementsScreen],
+  ['Documents', DocumentsScreen],
 ];
 
 /**

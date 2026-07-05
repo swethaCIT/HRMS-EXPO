@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -57,6 +57,7 @@ export class LeavesService {
     if (!leave) throw new NotFoundException('Leave not found');
     leave.status = LeaveStatus.APPROVED;
     leave.approvedById = approverId;
+    leave.decidedAt = new Date();
     const saved = await this.leaveRepo.save(leave);
     if (leave.employee?.id) await this.cache.del(this.balanceKey(leave.employee.id));
     await this.notify(
@@ -72,6 +73,8 @@ export class LeavesService {
     if (!leave) throw new NotFoundException('Leave not found');
     leave.status = LeaveStatus.REJECTED;
     leave.rejectionReason = reason;
+    leave.decidedAt = new Date();
+    leave.decisionNote = reason;
     const saved = await this.leaveRepo.save(leave);
     if (leave.employee?.id) await this.cache.del(this.balanceKey(leave.employee.id));
     await this.notify(
@@ -80,6 +83,19 @@ export class LeavesService {
       `Your ${leave.type} leave (${this.fmtDate(leave.startDate)} to ${this.fmtDate(leave.endDate)}) has been rejected.` +
         (reason ? ` Reason: ${reason}` : ''),
     );
+    return saved;
+  }
+
+  /** Employee withdraws their own pending leave request. */
+  async cancel(id: string): Promise<Leave> {
+    const leave = await this.leaveRepo.findOne({ where: { id }, relations: { employee: true } });
+    if (!leave) throw new NotFoundException('Leave not found');
+    if (leave.status !== LeaveStatus.PENDING) {
+      throw new BadRequestException('Only pending leaves can be cancelled');
+    }
+    leave.status = LeaveStatus.CANCELLED;
+    const saved = await this.leaveRepo.save(leave);
+    if (leave.employee?.id) await this.cache.del(this.balanceKey(leave.employee.id));
     return saved;
   }
 

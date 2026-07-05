@@ -31,6 +31,12 @@ function mapTicket(t: any): Ticket {
 
 const DEPT_ICON: Record<string, string> = { HR: '🧑‍💼', IT: '💻', Admin: '🗂️', Others: '❓' };
 
+/* Neutral/gray chip for cancelled (and any status not in STATUS_STYLE). */
+const NEUTRAL_STATUS = { color: '#6B7280', bg: '#F3F4F6' };
+function statusStyleOf(status: string): { color: string; bg: string } {
+  return (STATUS_STYLE as Record<string, { color: string; bg: string }>)[status] ?? NEUTRAL_STATUS;
+}
+
 const INITIAL: Ticket[] = [
   {
     id: 'TKT-1043', subject: 'Laptop not powering on after update',
@@ -98,6 +104,12 @@ export default function TicketsScreen({ navigation, route }: any) {
     } catch { /* keep mock */ }
   }, []);
   useEffect(() => { loadTickets(); }, [loadTickets]);
+
+  /* refetch when returning to this screen (e.g. after withdrawing from the detail) */
+  useEffect(() => {
+    const unsub = navigation?.addListener?.('focus', loadTickets);
+    return unsub;
+  }, [navigation, loadTickets]);
 
   /* a freshly-raised ticket comes back from the wizard → persist then refresh */
   useEffect(() => {
@@ -196,7 +208,7 @@ export default function TicketsScreen({ navigation, route }: any) {
         )}
 
         {visible.map(t => {
-          const st  = STATUS_STYLE[t.status];
+          const st  = statusStyleOf(t.status);
           const pri = PRIORITIES.find(p => p.key === t.priority)!;
           const ap  = APPROVAL_STYLE[t.approval];
           return (

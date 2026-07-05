@@ -42,6 +42,11 @@ export class TicketsController {
     return this.ticketsService.reject(id);
   }
 
+  @Patch(':id/cancel')
+  cancel(@Param('id') id: string) {
+    return this.ticketsService.cancel(id);
+  }
+
   @Patch(':id/status')
   updateStatus(@Param('id') id: string, @Body('status') status: string) {
     return this.ticketsService.updateStatus(id, status);

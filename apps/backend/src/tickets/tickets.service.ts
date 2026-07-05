@@ -64,6 +64,7 @@ export class TicketsService {
     if (!ticket) throw new NotFoundException('Ticket not found');
     ticket.approval = approval;
     if (status) ticket.status = status;
+    ticket.decidedAt = new Date();
     const saved = await this.ticketRepo.save(ticket);
     if (ticket.createdById) await this.cache.del(this.mineKey(ticket.createdById));
     if (approval === 'Approved') {
@@ -90,6 +91,15 @@ export class TicketsService {
     } catch (err: any) {
       this.logger.error(`Failed to create ticket notification: ${err?.message}`);
     }
+  }
+
+  async cancel(id: string): Promise<Ticket> {
+    const ticket = await this.ticketRepo.findOne({ where: { id } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    ticket.status = 'Cancelled';
+    const saved = await this.ticketRepo.save(ticket);
+    if (ticket.createdById) await this.cache.del(this.mineKey(ticket.createdById));
+    return saved;
   }
 
   async updateStatus(id: string, status: string): Promise<Ticket> {

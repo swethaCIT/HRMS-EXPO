@@ -13,7 +13,7 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
-import { attendanceApi, leaveApi } from '../../services/api';
+import { attendanceApi, leaveApi, announcementApi, holidayApi } from '../../services/api';
 import Icon from '../../components/Icon';
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; fg: string }> = {
@@ -58,6 +58,33 @@ export default function DashboardScreen({ navigation }: any) {
   const [today, setToday] = useState<any>(null);
   const [punching, setPunching] = useState(false);
   const [leaveDays, setLeaveDays] = useState<number | null>(null);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [nextHoliday, setNextHoliday] = useState<any>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await announcementApi.list();
+        if (Array.isArray(data)) {
+          const sorted = [...data].sort((a, b) => {
+            if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          });
+          setAnnouncements(sorted);
+        }
+      } catch { /* offline */ }
+      try {
+        const { data } = await holidayApi.list();
+        if (Array.isArray(data)) {
+          const t = new Date(); t.setHours(0, 0, 0, 0);
+          const future = data
+            .filter((h: any) => { const [y, m, d] = (h.date || '').split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1).getTime() >= t.getTime(); })
+            .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
+          setNextHoliday(future[0] || null);
+        }
+      } catch { /* offline */ }
+    })();
+  }, []);
 
   const loadToday = useCallback(async () => {
     if (!employee?.id) return;
@@ -181,6 +208,59 @@ export default function DashboardScreen({ navigation }: any) {
             </View>
           </View>
         </View>
+
+        {/* ── Announcements ── */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>ANNOUNCEMENTS</Text>
+            <TouchableOpacity onPress={() => navigation?.navigate('Announcements')}>
+              <Text style={styles.seeAll}>See all ›</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.card}>
+            {announcements.length === 0 ? (
+              <Text style={styles.annEmpty}>No announcements right now.</Text>
+            ) : (
+              announcements.slice(0, 2).map((a, i, arr) => (
+                <TouchableOpacity
+                  key={a.id}
+                  activeOpacity={0.8}
+                  onPress={() => navigation?.navigate('Announcements')}
+                  style={[styles.annRow, i < arr.length - 1 && styles.annDivider]}
+                >
+                  <Text style={styles.annPin}>{a.pinned ? '📌' : '📣'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.annTitle} numberOfLines={1}>{a.title}</Text>
+                    <Text style={styles.annBody} numberOfLines={1}>{a.body}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        </View>
+
+        {/* ── Upcoming Holiday ── */}
+        {nextHoliday && (() => {
+          const [y, m, d] = String(nextHoliday.date).split('-').map(Number);
+          const hd = new Date(y, (m || 1) - 1, d || 1);
+          return (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => navigation?.navigate('Holidays')}
+              style={styles.holidayCard}
+            >
+              <View style={styles.holidayChip}>
+                <Text style={styles.holidayChipDay}>{hd.getDate()}</Text>
+                <Text style={styles.holidayChipMon}>{hd.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.holidayLabel}>UPCOMING HOLIDAY</Text>
+                <Text style={styles.holidayName} numberOfLines={1}>{nextHoliday.name}</Text>
+              </View>
+              <Icon name="chevron-right" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          );
+        })()}
 
         {/* ── My Overview ── */}
         <View style={styles.section}>
@@ -427,6 +507,27 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   seeAll: { fontSize: 12, color: '#4F46E5', fontWeight: '600' },
+
+  /* Announcements + Holiday (dashboard cards) */
+  annRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  annDivider: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  annPin: { fontSize: 16 },
+  annTitle: { fontSize: 14, fontWeight: '700', color: '#1F2937' },
+  annBody: { fontSize: 12, color: '#6B7280', marginTop: 1 },
+  annEmpty: { fontSize: 13, color: '#9CA3AF', paddingVertical: 8, textAlign: 'center' },
+  holidayCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF',
+    borderRadius: 16, padding: 14, marginBottom: 16,
+    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+  },
+  holidayChip: {
+    width: 46, height: 50, borderRadius: 12, borderWidth: 1.5, borderColor: '#4F46E5',
+    backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center',
+  },
+  holidayChipDay: { fontSize: 18, fontWeight: '800', color: '#4F46E5' },
+  holidayChipMon: { fontSize: 9.5, fontWeight: '700', color: '#4F46E5', letterSpacing: 0.5 },
+  holidayLabel: { fontSize: 10.5, fontWeight: '700', color: '#9CA3AF', letterSpacing: 0.8 },
+  holidayName: { fontSize: 15, fontWeight: '700', color: '#1F2937', marginTop: 2 },
 
   /* Overview Grid */
   overviewGrid: {

@@ -43,6 +43,15 @@ export class Ticket {
   @Column()
   createdById: string;
 
+  @Column({ nullable: true })
+  approvedById: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  decidedAt: Date;
+
+  @Column({ type: 'text', nullable: true })
+  decisionNote: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

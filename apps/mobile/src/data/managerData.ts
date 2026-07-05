@@ -107,6 +107,9 @@ export interface ApprovalItem {
   leaveId?: string;
   /** Present when this item is backed by a real DB ticket row (enables real approve/reject). */
   ticketId?: string;
+  /** Audit trail (populated once a decision is made). */
+  decidedAt?: string;
+  decisionNote?: string;
 }
 
 export const APPROVALS_SEED: ApprovalItem[] = [

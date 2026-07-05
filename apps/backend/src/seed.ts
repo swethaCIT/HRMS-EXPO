@@ -25,6 +25,8 @@ import { Notification, NotificationType } from './notifications/entities/notific
 import { Ticket } from './tickets/entities/ticket.entity';
 import { Asset } from './assets/entities/asset.entity';
 import { Request } from './requests/entities/request.entity';
+import { Holiday } from './holidays/entities/holiday.entity';
+import { Announcement } from './announcements/entities/announcement.entity';
 
 dotenv.config();
 
@@ -88,7 +90,7 @@ async function main() {
     type: 'postgres',
     url,
     ssl: { rejectUnauthorized: false },
-    entities: [User, Employee, Attendance, Leave, Payroll, Notification, Ticket, Asset, Request],
+    entities: [User, Employee, Attendance, Leave, Payroll, Notification, Ticket, Asset, Request, Holiday, Announcement],
     synchronize: true,
   });
 
@@ -104,6 +106,8 @@ async function main() {
   const ticketRepo = ds.getRepository(Ticket);
   const assetRepo = ds.getRepository(Asset);
   const requestRepo = ds.getRepository(Request);
+  const holidayRepo = ds.getRepository(Holiday);
+  const announcementRepo = ds.getRepository(Announcement);
 
   const hashed = await bcrypt.hash(PASSWORD, 10);
 
@@ -254,6 +258,44 @@ async function main() {
       }),
     ]);
     console.log('✅ 3 HR requests');
+  }
+
+  // Company holidays for 2026 (idempotent — only when the table is empty)
+  if ((await holidayRepo.count()) === 0) {
+    await holidayRepo.save([
+      holidayRepo.create({ date: new Date('2026-01-01'), name: "New Year's Day", type: 'public' }),
+      holidayRepo.create({ date: new Date('2026-01-26'), name: 'Republic Day', type: 'public' }),
+      holidayRepo.create({ date: new Date('2026-04-03'), name: 'Good Friday', type: 'public' }),
+      holidayRepo.create({ date: new Date('2026-05-01'), name: 'Labour Day', type: 'public' }),
+      holidayRepo.create({ date: new Date('2026-08-15'), name: 'Independence Day', type: 'public' }),
+      holidayRepo.create({ date: new Date('2026-10-02'), name: 'Gandhi Jayanti', type: 'public' }),
+      holidayRepo.create({ date: new Date('2026-11-08'), name: 'Diwali', type: 'public' }),
+      holidayRepo.create({ date: new Date('2026-12-25'), name: 'Christmas', type: 'public' }),
+    ]);
+    console.log('✅ 8 holidays for 2026');
+  }
+
+  // Company-wide announcements (idempotent — only when the table is empty)
+  const adminUser = await userRepo.findOne({ where: { email: 'admin@hrms.com' } });
+  if (adminUser && (await announcementRepo.count()) === 0) {
+    await announcementRepo.save([
+      announcementRepo.create({
+        title: 'Welcome to the new HRMS portal',
+        body: 'We are excited to launch the new HRMS portal. Explore leaves, payslips, tickets and more from one place.',
+        category: 'general', authorId: adminUser.id, authorName: 'Admin User', pinned: true,
+      }),
+      announcementRepo.create({
+        title: 'Q3 town hall on Friday',
+        body: 'Join the company-wide Q3 town hall this Friday at 4 PM. Leadership will share updates and take questions.',
+        category: 'event', authorId: adminUser.id, authorName: 'Admin User',
+      }),
+      announcementRepo.create({
+        title: 'Updated leave policy',
+        body: 'The leave policy has been updated effective this quarter. Please review the changes in the policy section.',
+        category: 'policy', authorId: adminUser.id, authorName: 'Admin User',
+      }),
+    ]);
+    console.log('✅ 3 announcements');
   }
 
   await ds.destroy();

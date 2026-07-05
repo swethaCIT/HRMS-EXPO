@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Dimensions,
 } from 'react-native';
@@ -6,6 +6,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
 import { fetchHRRequests } from '../../store/slices/hrRequestsSlice';
+import { announcementApi, holidayApi } from '../../services/api';
 import { initialsOf, avatarColor, PRESENCE_META } from '../../data/managerData';
 import {
   T, HR_PEOPLE, HR_KIND_META, TINT, NEW_JOINERS, CELEBRATIONS,
@@ -29,6 +30,33 @@ export default function HRDashboardScreen({ navigation }: any) {
   const unread = useSelector((s: RootState) => s.notifications.items.filter((i) => !i.read).length);
 
   useEffect(() => { dispatch(fetchNotifications()); dispatch(fetchHRRequests()); }, [dispatch]);
+
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [nextHoliday, setNextHoliday] = useState<any>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await announcementApi.list();
+        if (Array.isArray(data)) {
+          const sorted = [...data].sort((a, b) => {
+            if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          });
+          setAnnouncements(sorted);
+        }
+      } catch { /* offline */ }
+      try {
+        const { data } = await holidayApi.list();
+        if (Array.isArray(data)) {
+          const t = new Date(); t.setHours(0, 0, 0, 0);
+          const future = data
+            .filter((h: any) => { const [y, m, d] = (h.date || '').split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1).getTime() >= t.getTime(); })
+            .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
+          setNextHoliday(future[0] || null);
+        }
+      } catch { /* offline */ }
+    })();
+  }, []);
 
   const name = (user?.email?.split('@')[0] || 'HR').replace(/\./g, ' ');
   const pending = requests.filter((r) => r.status === 'pending');
@@ -123,6 +151,55 @@ export default function HRDashboardScreen({ navigation }: any) {
             </View>
           </TouchableOpacity>
         </View>
+
+        {/* announcements */}
+        <View style={st.section}>
+          <View style={st.sectionHead}>
+            <Text style={st.sectionTitle}>ANNOUNCEMENTS</Text>
+            <TouchableOpacity onPress={() => navigation?.navigate('Announcements')}>
+              <Text style={st.seeAll}>See all ›</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={st.card}>
+            {announcements.length === 0 ? (
+              <Text style={st.annEmpty}>No announcements yet. Post one from the Announcements screen.</Text>
+            ) : (
+              announcements.slice(0, 2).map((a, i, arr) => (
+                <TouchableOpacity
+                  key={a.id}
+                  activeOpacity={0.8}
+                  onPress={() => navigation?.navigate('Announcements')}
+                  style={[st.annRow, i < arr.length - 1 && st.annDivider]}
+                >
+                  <Text style={st.annPin}>{a.pinned ? '📌' : '📣'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={st.annTitle} numberOfLines={1}>{a.title}</Text>
+                    <Text style={st.annBody} numberOfLines={1}>{a.body}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        </View>
+
+        {/* upcoming holiday */}
+        {nextHoliday && (() => {
+          const [y, m, d] = String(nextHoliday.date).split('-').map(Number);
+          const hd = new Date(y, (m || 1) - 1, d || 1);
+          return (
+            <TouchableOpacity activeOpacity={0.85} onPress={() => navigation?.navigate('Holidays')} style={st.holidayCard}>
+              <View style={st.holidayChip}>
+                <Text style={st.holidayChipDay}>{hd.getDate()}</Text>
+                <Text style={st.holidayChipMon}>{hd.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={st.holidayLabel}>UPCOMING HOLIDAY</Text>
+                <Text style={st.holidayName} numberOfLines={1}>{nextHoliday.name}</Text>
+              </View>
+              <Icon name="chevron-right" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          );
+        })()}
 
         {/* quick actions */}
         <View style={st.section}>
@@ -253,6 +330,19 @@ const st = StyleSheet.create({
   kindIcon: { width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   kindLabel: { flex: 1, fontSize: 13, color: T.ink, fontWeight: '500' },
   kindCount: { fontSize: 14, fontWeight: '800' },
+
+  annRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  annDivider: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  annPin: { fontSize: 16 },
+  annTitle: { fontSize: 14, fontWeight: '700', color: T.ink },
+  annBody: { fontSize: 12, color: T.sub, marginTop: 1 },
+  annEmpty: { fontSize: 13, color: T.faint, paddingVertical: 8, textAlign: 'center' },
+  holidayCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: T.card, borderRadius: 16, padding: 14, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  holidayChip: { width: 46, height: 50, borderRadius: 12, borderWidth: 1.5, borderColor: T.primary, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
+  holidayChipDay: { fontSize: 18, fontWeight: '800', color: T.primary },
+  holidayChipMon: { fontSize: 9.5, fontWeight: '700', color: T.primary, letterSpacing: 0.5 },
+  holidayLabel: { fontSize: 10.5, fontWeight: '700', color: T.faint, letterSpacing: 0.8 },
+  holidayName: { fontSize: 15, fontWeight: '700', color: T.ink, marginTop: 2 },
 
   quickRow: { flexDirection: 'row', gap: 10 },
   quickChip: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: T.card, borderRadius: 12, paddingVertical: 14, gap: 6, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },

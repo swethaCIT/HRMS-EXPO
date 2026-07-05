@@ -51,6 +51,12 @@ export class Leave {
   @Column({ nullable: true })
   rejectionReason: string;
 
+  @Column({ type: 'timestamp', nullable: true })
+  decidedAt: Date;
+
+  @Column({ type: 'text', nullable: true })
+  decisionNote: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

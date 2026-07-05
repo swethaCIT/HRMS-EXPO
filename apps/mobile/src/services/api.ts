@@ -49,6 +49,7 @@ export const ticketApi = {
   approve: (id: string) => api.patch(`/tickets/${id}/approve`),
   reject: (id: string) => api.patch(`/tickets/${id}/reject`),
   setStatus: (id: string, status: string) => api.patch(`/tickets/${id}/status`, { status }),
+  cancel: (id: string) => api.patch(`/tickets/${id}/cancel`),
 };
 
 export const employeeApi = {
@@ -70,6 +71,28 @@ export const leaveApi = {
   getByEmployee: (employeeId: string) => api.get(`/leaves/employee/${employeeId}`),
   getAll: () => api.get('/leaves'),
   balance: (employeeId: string) => api.get(`/leaves/balance/${employeeId}`),
+  cancel: (id: string) => api.patch(`/leaves/${id}/cancel`),
+};
+
+// Company holiday calendar
+export const holidayApi = {
+  list: () => api.get('/holidays'),
+  create: (data: any) => api.post('/holidays', data),
+  remove: (id: string) => api.delete(`/holidays/${id}`),
+};
+
+// Company announcements feed
+export const announcementApi = {
+  list: () => api.get('/announcements'),
+  create: (data: any) => api.post('/announcements', data),
+  remove: (id: string) => api.delete(`/announcements/${id}`),
+};
+
+// Employee document center (Supabase-backed storage)
+export const documentApi = {
+  byEmployee: (employeeId: string) => api.get(`/documents/employee/${employeeId}`),
+  create: (data: any) => api.post('/documents', data),
+  remove: (id: string) => api.delete(`/documents/${id}`),
 };
 
 export const analyticsApi = {

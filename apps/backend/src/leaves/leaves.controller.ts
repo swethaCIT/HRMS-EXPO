@@ -45,4 +45,9 @@ export class LeavesController {
   reject(@Param('id') id: string, @Body('reason') reason: string) {
     return this.leavesService.reject(id, reason);
   }
+
+  @Patch(':id/cancel')
+  cancel(@Param('id') id: string) {
+    return this.leavesService.cancel(id);
+  }
 }

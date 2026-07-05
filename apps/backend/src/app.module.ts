@@ -18,6 +18,9 @@ import { RequestsModule } from './requests/requests.module';
 import { MailModule } from './mail/mail.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { HolidaysModule } from './holidays/holidays.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
+import { DocumentsModule } from './documents/documents.module';
 import { HealthController } from './health/health.controller';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
 import { getDatabaseConfig } from './config/database.config';
@@ -51,6 +54,9 @@ import { getDatabaseConfig } from './config/database.config';
     MailModule,
     OnboardingModule,
     AnalyticsModule,
+    HolidaysModule,
+    AnnouncementsModule,
+    DocumentsModule,
   ],
   controllers: [HealthController],
   providers: [

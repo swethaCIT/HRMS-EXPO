@@ -1,15 +1,41 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert,
 } from 'react-native';
 import {
   PRIORITIES, STATUS_STYLE, APPROVAL_STYLE, buildTracker, Ticket,
 } from '../../data/ticketTaxonomy';
+import { ticketApi } from '../../services/api';
 
 const DEPT_ICON: Record<string, string> = { HR: '🧑‍💼', IT: '💻', Admin: '🗂️', Others: '❓' };
 
+/* Neutral/gray chip for cancelled (and any status not in STATUS_STYLE). */
+const NEUTRAL_STATUS = { color: '#6B7280', bg: '#F3F4F6' };
+function statusStyleOf(status: string): { color: string; bg: string } {
+  return (STATUS_STYLE as Record<string, { color: string; bg: string }>)[status] ?? NEUTRAL_STATUS;
+}
+
 export default function TicketDetailScreen({ navigation, route }: any) {
   const ticket: Ticket | undefined = route?.params?.ticket;
+  const [withdrawing, setWithdrawing] = useState(false);
+
+  /* employee self-service: withdraw a ticket that is still open / pending approval */
+  function handleWithdraw() {
+    if (!ticket) return;
+    Alert.alert('Withdraw Ticket', 'Withdraw this ticket? This cannot be undone.', [
+      { text: 'Keep', style: 'cancel' },
+      {
+        text: 'Withdraw',
+        style: 'destructive',
+        onPress: async () => {
+          setWithdrawing(true);
+          try { await ticketApi.cancel(ticket.id); } catch { /* offline: still leave the screen */ }
+          setWithdrawing(false);
+          navigation?.goBack();
+        },
+      },
+    ]);
+  }
 
   if (!ticket) {
     return (
@@ -19,10 +45,11 @@ export default function TicketDetailScreen({ navigation, route }: any) {
     );
   }
 
-  const st      = STATUS_STYLE[ticket.status];
+  const st      = statusStyleOf(ticket.status);
   const ap      = APPROVAL_STYLE[ticket.approval];
   const pri     = PRIORITIES.find(p => p.key === ticket.priority)!;
   const tracker = buildTracker(ticket);
+  const canWithdraw = ticket.status === 'Open' || ticket.approval === 'Pending';
 
   return (
     <View style={s.root}>
@@ -196,6 +223,18 @@ export default function TicketDetailScreen({ navigation, route }: any) {
             </View>
           </View>
         )}
+
+        {/* ── Withdraw ── */}
+        {canWithdraw && (
+          <TouchableOpacity
+            style={[s.withdrawBtn, withdrawing && s.withdrawBtnDisabled]}
+            onPress={handleWithdraw}
+            disabled={withdrawing}
+            activeOpacity={0.85}
+          >
+            <Text style={s.withdrawText}>{withdrawing ? 'Withdrawing…' : 'Withdraw ticket'}</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );
@@ -279,4 +318,13 @@ const s = StyleSheet.create({
   chipAvatar: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#4F46E5', alignItems: 'center', justifyContent: 'center' },
   chipAvatarText: { color: '#FFF', fontSize: 9, fontWeight: '700' },
   chipName: { fontSize: 12, color: '#3730A3', fontWeight: '600' },
+
+  /* withdraw */
+  withdrawBtn: {
+    marginHorizontal: 16, marginTop: 16,
+    borderRadius: 12, paddingVertical: 15, alignItems: 'center',
+    backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FCA5A5',
+  },
+  withdrawBtnDisabled: { opacity: 0.6 },
+  withdrawText: { color: '#DC2626', fontSize: 15, fontWeight: '700' },
 });

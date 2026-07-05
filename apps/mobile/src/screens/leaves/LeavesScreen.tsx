@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Modal, StatusBar, Dimensions,
+  TextInput, Modal, StatusBar, Dimensions, Alert,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
@@ -17,6 +17,35 @@ const TYPE_MAP: Record<string, string> = {
   'Emergency Leave': 'emergency',
   'Unpaid Leave': 'unpaid',
 };
+/* Reverse of TYPE_MAP: backend enum → readable label for the requests list. */
+const TYPE_LABEL: Record<string, string> = {
+  annual: 'Annual Leave',
+  sick: 'Sick Leave',
+  emergency: 'Emergency Leave',
+  unpaid: 'Unpaid Leave',
+  casual: 'Casual Leave',
+};
+
+type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+interface MyLeave {
+  id: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  status: LeaveStatus;
+  reason?: string;
+}
+
+/* Status chip palette (pending=amber, approved=green, rejected=red, cancelled=gray). */
+const LEAVE_STATUS: Record<LeaveStatus, { bg: string; color: string; label: string }> = {
+  pending:   { bg: '#FEF3C7', color: '#B45309', label: 'Pending' },
+  approved:  { bg: '#D1FAE5', color: '#065F46', label: 'Approved' },
+  rejected:  { bg: '#FEE2E2', color: '#991B1B', label: 'Rejected' },
+  cancelled: { bg: '#F3F4F6', color: '#6B7280', label: 'Cancelled' },
+};
+
 const CELL = Math.floor((width - 64) / 7);
 
 const MONTHS = [
@@ -60,6 +89,11 @@ function countDays(from: Date, to: Date): number {
 function fmtDate(d: Date): string {
   return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
 }
+function fmtISO(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+}
 
 /* ── mock attendance (replace with API data) ── */
 const ATTENDANCE: Record<string, 'present' | 'leave' | 'wfh'> = {
@@ -86,6 +120,17 @@ export default function LeavesScreen({ navigation }: any) {
   const [reason, setReason]       = useState('');
   const [showPicker, setShowPicker]   = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [myLeaves, setMyLeaves]       = useState<MyLeave[]>([]);
+
+  /* fetch this employee's leave requests on mount / when the profile loads */
+  const loadLeaves = React.useCallback(async () => {
+    if (!employee?.id) return;
+    try {
+      const { data } = await leaveApi.getByEmployee(employee.id);
+      if (Array.isArray(data)) setMyLeaves(data as MyLeave[]);
+    } catch { /* offline: keep whatever we already have */ }
+  }, [employee?.id]);
+  useEffect(() => { loadLeaves(); }, [loadLeaves]);
 
   const grid = calendarGrid(year, month);
   const rows: typeof grid[] = Array.from({ length: 6 }, (_, i) => grid.slice(i * 7, i * 7 + 7));
@@ -118,9 +163,27 @@ export default function LeavesScreen({ navigation }: any) {
           endDate: dateKey(toDate),
           reason,
         });
+        await loadLeaves(); // refresh "My Leave Requests" with the new row
       } catch { /* offline: still show the confirmation */ }
     }
     setShowSummary(true);
+  }
+
+  /* employee self-service: withdraw a still-pending request */
+  function handleWithdraw(id: string) {
+    Alert.alert('Withdraw Leave', 'Withdraw this leave request?', [
+      { text: 'Keep', style: 'cancel' },
+      {
+        text: 'Withdraw',
+        style: 'destructive',
+        onPress: async () => {
+          // optimistic: flip to cancelled immediately
+          setMyLeaves(prev => prev.map(l => (l.id === id ? { ...l, status: 'cancelled' } : l)));
+          try { await leaveApi.cancel(id); } catch { /* offline: keep optimistic state */ }
+          loadLeaves();
+        },
+      },
+    ]);
   }
 
   function resetForm() {
@@ -318,6 +381,43 @@ export default function LeavesScreen({ navigation }: any) {
           >
             <Text style={s.submitText}>Submit Leave Request</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* ── My Leave Requests ── */}
+        <View style={[s.card, { marginTop: 8 }]}>
+          <Text style={s.formTitle}>MY LEAVE REQUESTS</Text>
+
+          {myLeaves.length === 0 ? (
+            <Text style={s.emptyLeaves}>No leave requests yet.</Text>
+          ) : (
+            myLeaves.map((lv) => {
+              const cfg = LEAVE_STATUS[lv.status] ?? LEAVE_STATUS.pending;
+              return (
+                <View key={lv.id} style={s.leaveItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.leaveType}>{TYPE_LABEL[lv.type] ?? lv.type}</Text>
+                    <Text style={s.leaveDates}>
+                      {fmtISO(lv.startDate)} – {fmtISO(lv.endDate)} · {lv.totalDays} {lv.totalDays === 1 ? 'day' : 'days'}
+                    </Text>
+                  </View>
+                  <View style={s.leaveRight}>
+                    <View style={[s.statusChip, { backgroundColor: cfg.bg }]}>
+                      <Text style={[s.statusChipText, { color: cfg.color }]}>{cfg.label}</Text>
+                    </View>
+                    {lv.status === 'pending' && (
+                      <TouchableOpacity
+                        style={s.withdrawBtn}
+                        onPress={() => handleWithdraw(lv.id)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={s.withdrawText}>Withdraw</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              );
+            })
+          )}
         </View>
       </ScrollView>
 
@@ -518,6 +618,23 @@ const s = StyleSheet.create({
   submitBtn:         { backgroundColor:'#4F46E5', borderRadius:12, padding:16, alignItems:'center' },
   submitBtnDisabled: { backgroundColor:'#C4C4DE', opacity: 0.7 },
   submitText:        { color:'#FFF', fontSize:16, fontWeight:'700' },
+
+  /* my leave requests */
+  emptyLeaves: { fontSize:13, color:'#9CA3AF', paddingVertical:8 },
+  leaveItem: {
+    flexDirection:'row', alignItems:'center', gap:12,
+    paddingVertical:12, borderBottomWidth:1, borderBottomColor:'#F3F4F6',
+  },
+  leaveType:  { fontSize:14, fontWeight:'700', color:'#1F2937' },
+  leaveDates: { fontSize:12, color:'#6B7280', marginTop:3 },
+  leaveRight: { alignItems:'flex-end', gap:6 },
+  statusChip:     { borderRadius:6, paddingHorizontal:10, paddingVertical:3 },
+  statusChipText: { fontSize:11, fontWeight:'700' },
+  withdrawBtn: {
+    borderWidth:1, borderColor:'#FCA5A5', borderRadius:8,
+    paddingHorizontal:10, paddingVertical:4, backgroundColor:'#FEF2F2',
+  },
+  withdrawText: { fontSize:11, fontWeight:'700', color:'#DC2626' },
 
   /* leave type sheet */
   overlay: { flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end' },

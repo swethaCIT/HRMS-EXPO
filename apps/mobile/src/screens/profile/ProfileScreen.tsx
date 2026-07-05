@@ -168,6 +168,11 @@ export default function ProfileScreen({ navigation }: any) {
         {/* Account */}
         <Text style={st.sectionTitle}>ACCOUNT</Text>
         <View style={st.card}>
+          <TouchableOpacity style={[st.row, st.rowDivider]} onPress={() => navigation?.navigate('Documents')}>
+            <View style={st.rowIcon}><Icon name="file-text" size={17} color={T.primary} /></View>
+            <Text style={st.rowLabel}>My Documents</Text>
+            <Icon name="chevron-right" size={18} color="#D1D5DB" />
+          </TouchableOpacity>
           <TouchableOpacity style={[st.row, st.rowDivider]} onPress={() => navigation?.navigate('Notifications')}>
             <View style={st.rowIcon}><Icon name="bell" size={17} color={T.primary} /></View>
             <Text style={st.rowLabel}>Notifications</Text>

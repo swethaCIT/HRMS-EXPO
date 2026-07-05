@@ -176,8 +176,12 @@ export default function ApprovalsScreen({ navigation }: any) {
               ) : (
                 <View style={[st.resultBar, { backgroundColor: it.status === 'approved' ? T.green.bg : T.red.bg }]}>
                   <Text style={[st.resultTx, { color: it.status === 'approved' ? T.green.fg : T.red.fg }]}>
-                    {it.status === 'approved' ? '✓  Approved by you' : '✕  Rejected by you'}
+                    {it.status === 'approved' ? '✓  Approved' : '✕  Rejected'}
+                    {it.decidedAt ? `  ·  ${it.decidedAt}` : ''}
                   </Text>
+                  {it.status === 'rejected' && !!it.decisionNote && (
+                    <Text style={st.resultNote} numberOfLines={2}>“{it.decisionNote}”</Text>
+                  )}
                 </View>
               )}
             </View>
@@ -267,8 +271,9 @@ const st = StyleSheet.create({
   approveBtn: { backgroundColor: T.primary },
   approveTx: { color: '#FFF', fontWeight: '700', fontSize: 13 },
 
-  resultBar: { marginTop: 12, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
+  resultBar: { marginTop: 12, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center' },
   resultTx: { fontWeight: '700', fontSize: 13 },
+  resultNote: { marginTop: 4, fontSize: 12, color: '#991B1B', fontStyle: 'italic', textAlign: 'center' },
 
   empty: { alignItems: 'center', paddingTop: 80, gap: 12 },
   emptyTx: { fontSize: 14, color: T.faint, fontWeight: '500', textAlign: 'center', paddingHorizontal: 40 },

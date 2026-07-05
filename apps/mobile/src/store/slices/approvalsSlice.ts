@@ -49,6 +49,8 @@ function mapLeave(l: any): ApprovalItem {
     submittedAt: 'recently',
     status,
     reason: l.reason,
+    decidedAt: l.decidedAt ? fmt(l.decidedAt) : undefined,
+    decisionNote: l.decisionNote || l.rejectionReason || undefined,
     detail: [
       { k: 'Type', v: `${cap(l.type)} Leave` },
       { k: 'Duration', v: `${fmt(l.startDate)} – ${fmt(l.endDate)}` },
@@ -74,6 +76,8 @@ function mapTicket(t: any, empMap: Record<string, EmpInfo>): ApprovalItem {
     submittedAt: 'recently',
     status,
     reason: t.description,
+    decidedAt: t.decidedAt ? fmt(t.decidedAt) : undefined,
+    decisionNote: t.decisionNote || undefined,
     detail: [
       { k: 'Ticket', v: t.ticketId ?? '' },
       { k: 'Department', v: t.dept ?? '—' },
