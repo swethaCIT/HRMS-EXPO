@@ -10,3 +10,11 @@ build/
 .vscode/
 coverage/
 .nyc_output/
+
+# Local test artifacts / manual QA output (never commit)
+/*.png
+/*.txt
+/testing.html
+apps/mobile/*.png
+apps/mobile/*.xml
+*_log.txt
