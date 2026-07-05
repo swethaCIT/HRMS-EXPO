@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, LayoutAnimation, Platform, UIManager,
+  RefreshControl,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { issue, rejectRequest, issueAllPending, fetchHRRequests } from '../../store/slices/hrRequestsSlice';
@@ -24,8 +26,17 @@ export default function RequestsScreen({ navigation }: any) {
   const items = useSelector((s: RootState) => s.hrRequests.items);
   const [tab, setTab] = useState<Tab>('pending');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => { dispatch(fetchHRRequests()); }, [dispatch]);
+  // Refetch every time this screen gains focus so a request submitted while
+  // HR was elsewhere in the app shows up immediately, not just on first mount.
+  useFocusEffect(useCallback(() => { dispatch(fetchHRRequests()); }, [dispatch]));
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await dispatch(fetchHRRequests());
+    setRefreshing(false);
+  }, [dispatch]);
 
   const counts: Record<Tab, number> = {
     pending: items.filter((i) => i.status === 'pending').length,
@@ -77,7 +88,12 @@ export default function RequestsScreen({ navigation }: any) {
         </View>
       </View>
 
-      <ScrollView style={st.body} contentContainerStyle={{ padding: 16, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={st.body}
+        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} colors={[T.primary]} />}
+      >
         {visible.length === 0 && (
           <View style={st.empty}>
             <Text style={{ fontSize: 40 }}>{tab === 'pending' ? '🎉' : '📭'}</Text>

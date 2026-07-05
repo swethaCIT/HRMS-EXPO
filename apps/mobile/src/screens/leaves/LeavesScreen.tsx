@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, Modal, StatusBar, Dimensions, Alert,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import { leaveApi } from '../../services/api';
@@ -130,7 +131,9 @@ export default function LeavesScreen({ navigation }: any) {
       if (Array.isArray(data)) setMyLeaves(data as MyLeave[]);
     } catch { /* offline: keep whatever we already have */ }
   }, [employee?.id]);
-  useEffect(() => { loadLeaves(); }, [loadLeaves]);
+  // Refetch on every focus (not just first mount) so a manager's approval or
+  // rejection shows up as soon as the employee comes back to this screen.
+  useFocusEffect(useCallback(() => { loadLeaves(); }, [loadLeaves]));
 
   const grid = calendarGrid(year, month);
   const rows: typeof grid[] = Array.from({ length: 6 }, (_, i) => grid.slice(i * 7, i * 7 + 7));

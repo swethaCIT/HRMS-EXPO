@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Dimensions,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
@@ -28,7 +29,15 @@ export default function ManagerDashboardScreen({ navigation }: any) {
   const approvals = useSelector((s: RootState) => s.approvals.items);
   const unread = useSelector((s: RootState) => s.notifications.items.filter((i) => !i.read).length);
 
-  useEffect(() => { dispatch(fetchNotifications()); dispatch(fetchApprovals()); }, [dispatch]);
+  // Refetch every time this tab regains focus (not just on first mount) so a
+  // leave/ticket submitted elsewhere shows up as soon as the manager looks,
+  // without needing to fully restart the app.
+  useFocusEffect(
+    useCallback(() => {
+      dispatch(fetchNotifications());
+      dispatch(fetchApprovals());
+    }, [dispatch]),
+  );
 
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [nextHoliday, setNextHoliday] = useState<any>(null);

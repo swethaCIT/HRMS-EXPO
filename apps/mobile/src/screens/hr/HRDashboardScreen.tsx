@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Dimensions,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
@@ -29,7 +30,14 @@ export default function HRDashboardScreen({ navigation }: any) {
   const requests = useSelector((s: RootState) => s.hrRequests.items);
   const unread = useSelector((s: RootState) => s.notifications.items.filter((i) => !i.read).length);
 
-  useEffect(() => { dispatch(fetchNotifications()); dispatch(fetchHRRequests()); }, [dispatch]);
+  // Refetch on every focus (not just first mount) so a request submitted
+  // elsewhere shows up as soon as HR looks at this tab.
+  useFocusEffect(
+    useCallback(() => {
+      dispatch(fetchNotifications());
+      dispatch(fetchHRRequests());
+    }, [dispatch]),
+  );
 
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [nextHoliday, setNextHoliday] = useState<any>(null);

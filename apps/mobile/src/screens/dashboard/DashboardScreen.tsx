@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
@@ -91,14 +92,21 @@ export default function DashboardScreen({ navigation }: any) {
     try { const { data } = await attendanceApi.today(employee.id); setToday(data || null); } catch { /* offline */ }
   }, [employee?.id]);
 
-  useEffect(() => { dispatch(fetchNotifications()); }, [dispatch]);
-  useEffect(() => { loadToday(); }, [loadToday]);
-  useEffect(() => {
+  const loadLeaveBalance = useCallback(async () => {
     if (!employee?.id) return;
-    (async () => {
-      try { const { data } = await leaveApi.balance(employee.id); setLeaveDays(data?.totalRemaining ?? null); } catch { /* offline */ }
-    })();
+    try { const { data } = await leaveApi.balance(employee.id); setLeaveDays(data?.totalRemaining ?? null); } catch { /* offline */ }
   }, [employee?.id]);
+
+  // Refetch every time this tab regains focus (not just first mount) so a
+  // leave approval/rejection from the manager, or a fresh punch-in, shows up
+  // as soon as the employee looks at their dashboard.
+  useFocusEffect(
+    useCallback(() => {
+      dispatch(fetchNotifications());
+      loadToday();
+      loadLeaveBalance();
+    }, [dispatch, loadToday, loadLeaveBalance]),
+  );
 
   const checkedIn = !!today?.checkIn;
   const checkedOut = !!today?.checkOut;

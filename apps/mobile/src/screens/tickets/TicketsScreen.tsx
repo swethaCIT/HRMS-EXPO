@@ -92,7 +92,7 @@ const INITIAL: Ticket[] = [
 
 const FILTERS: ('All' | TicketStatus)[] = ['All', 'Open', 'In Progress', 'Resolved', 'Closed'];
 
-export default function TicketsScreen({ navigation, route }: any) {
+export default function TicketsScreen({ navigation }: any) {
   const [tickets, setTickets] = useState<Ticket[]>(INITIAL);
   const [filter, setFilter]   = useState<'All' | TicketStatus>('All');
 
@@ -105,38 +105,11 @@ export default function TicketsScreen({ navigation, route }: any) {
   }, []);
   useEffect(() => { loadTickets(); }, [loadTickets]);
 
-  /* refetch when returning to this screen (e.g. after withdrawing from the detail) */
+  /* refetch when returning to this screen (e.g. after raising/withdrawing a ticket) */
   useEffect(() => {
     const unsub = navigation?.addListener?.('focus', loadTickets);
     return unsub;
   }, [navigation, loadTickets]);
-
-  /* a freshly-raised ticket comes back from the wizard → persist then refresh */
-  useEffect(() => {
-    const nt = route?.params?.newTicket;
-    if (!nt) return;
-    (async () => {
-      try {
-        await ticketApi.create({
-          subject: nt.subject, dept: nt.dept, category: nt.category,
-          subCategory: nt.subCategory, priority: nt.priority, description: nt.description,
-        });
-        await loadTickets();
-      } catch {
-        // offline: optimistic local add
-        const created: Ticket = {
-          id: `TKT-${1044 + tickets.length}`,
-          subject: nt.subject, dept: nt.dept, category: nt.category, subCategory: nt.subCategory,
-          priority: nt.priority, status: 'Open', approval: 'Pending', createdAt: '27 Jun 2026',
-          description: nt.description, notify: nt.notify, attachments: nt.attachments,
-          timeline: [{ label: 'Ticket submitted', at: '27 Jun 2026, 10:00 AM', by: 'You' }, { label: 'Awaiting approval', at: null }],
-        };
-        setTickets(prev => [created, ...prev]);
-      }
-      navigation.setParams({ newTicket: undefined });
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route?.params?.newTicket]);
 
   const visible = filter === 'All' ? tickets : tickets.filter(t => t.status === filter);
 

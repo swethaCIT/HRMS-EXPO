@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, LayoutAnimation, Platform, UIManager,
   RefreshControl, Modal, TextInput,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { approve, reject, approveAllPending, fetchApprovals } from '../../store/slices/approvalsSlice';
@@ -30,8 +31,10 @@ export default function ApprovalsScreen({ navigation }: any) {
   const [rejecting, setRejecting] = useState<string | null>(null); // item id being rejected
   const [rejectReason, setRejectReason] = useState('');
 
-  // Pull real pending leaves + tickets from the DB into the inbox.
-  useEffect(() => { dispatch(fetchApprovals()); }, [dispatch]);
+  // Pull real pending leaves + tickets from the DB into the inbox, every time
+  // this screen gains focus (not just on first mount) so a freshly-submitted
+  // request shows up as soon as the manager opens this tab.
+  useFocusEffect(useCallback(() => { dispatch(fetchApprovals()); }, [dispatch]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

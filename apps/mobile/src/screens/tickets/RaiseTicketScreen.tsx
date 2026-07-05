@@ -1,12 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, StatusBar, Modal,
+  TextInput, StatusBar, Modal, ActivityIndicator, Alert,
 } from 'react-native';
 import {
   DEPARTMENTS, PRIORITIES, WORK_MODES, DIRECTORY,
   Priority, WorkMode, Person, TicketDepartment, TicketCategory,
 } from '../../data/ticketTaxonomy';
+import { ticketApi } from '../../services/api';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 type Step = 1 | 2 | 3;
 const STEP_TITLES: Record<Step, string> = { 1: 'Basic Details', 2: 'Describe', 3: 'Review' };
@@ -27,6 +29,7 @@ export default function RaiseTicketScreen({ navigation, route }: any) {
 
   /* pickers */
   const [picker, setPicker] = useState<null | 'category' | 'subcategory' | 'notify'>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const canNext1 = !!dept && !!category && !!subCategory;
   const canNext2 = subject.trim().length > 0 && description.trim().length > 0;
@@ -49,14 +52,28 @@ export default function RaiseTicketScreen({ navigation, route }: any) {
     );
   }
 
-  function submit() {
-    const ticket = {
-      dept: dept?.label, category: category?.label, subCategory,
-      workMode, priority, subject, description,
-      notify: notify.map(n => n.name), attachments,
-    };
-    // hand the new ticket back to the Tickets tab list
-    navigation?.navigate?.('Tickets', { newTicket: ticket });
+  async function submit() {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await ticketApi.create({
+        subject: subject.trim(),
+        dept: dept?.label,
+        category: category?.label,
+        subCategory,
+        priority,
+        description: description.trim(),
+      });
+      Alert.alert('Ticket submitted', 'Your ticket has been raised and is awaiting approval.', [
+        // 'MyTickets' is reachable from every role (unlike the 'Tickets' tab,
+        // which only exists for employees), so this works for managers/HR/admin too.
+        { text: 'OK', onPress: () => navigation?.navigate?.('MyTickets') },
+      ]);
+    } catch (e) {
+      Alert.alert('Could not submit ticket', getErrorMessage(e, 'Please try again.'));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -325,11 +342,17 @@ export default function RaiseTicketScreen({ navigation, route }: any) {
         )}
         {step === 3 && (
           <View style={s.footerRow}>
-            <TouchableOpacity style={s.secondaryBtn} onPress={() => setStep(2)}>
+            <TouchableOpacity style={s.secondaryBtn} onPress={() => setStep(2)} disabled={submitting}>
               <Text style={s.secondaryText}>← Back</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[s.primaryBtn, { flex: 1, backgroundColor: '#10B981' }]} onPress={submit}>
-              <Text style={s.primaryText}>✓  Submit Ticket</Text>
+            <TouchableOpacity
+              style={[s.primaryBtn, { flex: 1, backgroundColor: '#10B981' }, submitting && { opacity: 0.7 }]}
+              onPress={submit}
+              disabled={submitting}
+            >
+              {submitting
+                ? <ActivityIndicator color="#FFF" />
+                : <Text style={s.primaryText}>✓  Submit Ticket</Text>}
             </TouchableOpacity>
           </View>
         )}
