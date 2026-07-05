@@ -2,11 +2,11 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Dimensions,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
 import { fetchApprovals } from '../../store/slices/approvalsSlice';
+import { useLivePolling } from '../../utils/useLivePolling';
 import {
   T, TEAM, PRESENCE_META, KIND_META, TINT, initialsOf, avatarColor,
 } from '../../data/managerData';
@@ -29,10 +29,10 @@ export default function ManagerDashboardScreen({ navigation }: any) {
   const approvals = useSelector((s: RootState) => s.approvals.items);
   const unread = useSelector((s: RootState) => s.notifications.items.filter((i) => !i.read).length);
 
-  // Refetch every time this tab regains focus (not just on first mount) so a
-  // leave/ticket submitted elsewhere shows up as soon as the manager looks,
-  // without needing to fully restart the app.
-  useFocusEffect(
+  // Refetch on focus, then keep polling every 15s while this tab stays open -
+  // so a leave/ticket submitted elsewhere shows up while the manager is
+  // sitting right here, not only after they navigate away and back.
+  useLivePolling(
     useCallback(() => {
       dispatch(fetchNotifications());
       dispatch(fetchApprovals());

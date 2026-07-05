@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar,
 } from 'react-native';
@@ -7,6 +7,7 @@ import {
   Ticket, TicketStatus,
 } from '../../data/ticketTaxonomy';
 import { ticketApi } from '../../services/api';
+import { useLivePolling } from '../../utils/useLivePolling';
 
 function fmtDate(iso: string): string {
   try { return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }
@@ -103,13 +104,11 @@ export default function TicketsScreen({ navigation }: any) {
       if (Array.isArray(data)) setTickets(data.map(mapTicket));
     } catch { /* keep mock */ }
   }, []);
-  useEffect(() => { loadTickets(); }, [loadTickets]);
 
-  /* refetch when returning to this screen (e.g. after raising/withdrawing a ticket) */
-  useEffect(() => {
-    const unsub = navigation?.addListener?.('focus', loadTickets);
-    return unsub;
-  }, [navigation, loadTickets]);
+  /* Refetch on focus, then keep polling every 15s while this screen stays
+   * open, so a manager's approve/reject shows up while the employee is
+   * looking, not only after raising/withdrawing a ticket themselves. */
+  useLivePolling(loadTickets);
 
   const visible = filter === 'All' ? tickets : tickets.filter(t => t.status === filter);
 

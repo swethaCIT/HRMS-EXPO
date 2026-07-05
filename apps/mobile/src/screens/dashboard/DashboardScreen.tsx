@@ -10,11 +10,11 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
 import { attendanceApi, leaveApi, announcementApi, holidayApi } from '../../services/api';
+import { useLivePolling } from '../../utils/useLivePolling';
 import Icon from '../../components/Icon';
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; fg: string }> = {
@@ -97,10 +97,10 @@ export default function DashboardScreen({ navigation }: any) {
     try { const { data } = await leaveApi.balance(employee.id); setLeaveDays(data?.totalRemaining ?? null); } catch { /* offline */ }
   }, [employee?.id]);
 
-  // Refetch every time this tab regains focus (not just first mount) so a
-  // leave approval/rejection from the manager, or a fresh punch-in, shows up
-  // as soon as the employee looks at their dashboard.
-  useFocusEffect(
+  // Refetch on focus, then keep polling every 15s while this tab stays open -
+  // so a leave approval/rejection from the manager shows up while the
+  // employee is looking, not only after they navigate away and back.
+  useLivePolling(
     useCallback(() => {
       dispatch(fetchNotifications());
       loadToday();

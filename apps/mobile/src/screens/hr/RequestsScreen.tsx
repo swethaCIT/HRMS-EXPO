@@ -3,10 +3,10 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, LayoutAnimation, Platform, UIManager,
   RefreshControl,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { issue, rejectRequest, issueAllPending, fetchHRRequests } from '../../store/slices/hrRequestsSlice';
+import { useLivePolling } from '../../utils/useLivePolling';
 import { initialsOf, avatarColor } from '../../data/managerData';
 import { T, HR_KIND_META, TINT, HRRequestStatus } from '../../data/hrData';
 
@@ -28,9 +28,9 @@ export default function RequestsScreen({ navigation }: any) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Refetch every time this screen gains focus so a request submitted while
-  // HR was elsewhere in the app shows up immediately, not just on first mount.
-  useFocusEffect(useCallback(() => { dispatch(fetchHRRequests()); }, [dispatch]));
+  // Refetch on focus, then keep polling every 15s while this screen stays
+  // open, so a request submitted elsewhere shows up while HR is looking.
+  useLivePolling(useCallback(() => { dispatch(fetchHRRequests()); }, [dispatch]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

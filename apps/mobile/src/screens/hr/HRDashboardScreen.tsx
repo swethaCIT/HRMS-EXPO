@@ -2,11 +2,11 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Dimensions,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
 import { fetchHRRequests } from '../../store/slices/hrRequestsSlice';
+import { useLivePolling } from '../../utils/useLivePolling';
 import { announcementApi, holidayApi } from '../../services/api';
 import { initialsOf, avatarColor, PRESENCE_META } from '../../data/managerData';
 import {
@@ -30,9 +30,9 @@ export default function HRDashboardScreen({ navigation }: any) {
   const requests = useSelector((s: RootState) => s.hrRequests.items);
   const unread = useSelector((s: RootState) => s.notifications.items.filter((i) => !i.read).length);
 
-  // Refetch on every focus (not just first mount) so a request submitted
-  // elsewhere shows up as soon as HR looks at this tab.
-  useFocusEffect(
+  // Refetch on focus, then keep polling every 15s while HR stays on this tab -
+  // so a request submitted elsewhere shows up while they're looking.
+  useLivePolling(
     useCallback(() => {
       dispatch(fetchNotifications());
       dispatch(fetchHRRequests());
