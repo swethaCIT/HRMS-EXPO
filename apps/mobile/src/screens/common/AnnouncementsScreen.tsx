@@ -7,6 +7,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import { T } from '../../data/managerData';
 import { announcementApi } from '../../services/api';
+import { getErrorMessage } from '../../utils/errorMessage';
 import Icon from '../../components/Icon';
 
 /* ── Types ── */
@@ -103,7 +104,7 @@ export default function AnnouncementsScreen({ navigation }: any) {
       setDraft({ title: '', body: '', category: 'General' });
       await load();
     } catch (e: any) {
-      Alert.alert('Could not post', e?.response?.data?.message || 'Please try again.');
+      Alert.alert('Could not post', getErrorMessage(e, 'Please try again.'));
     } finally { setPosting(false); }
   };
 
@@ -113,7 +114,7 @@ export default function AnnouncementsScreen({ navigation }: any) {
       {
         text: 'Delete', style: 'destructive', onPress: async () => {
           try { await announcementApi.remove(a.id); await load(); }
-          catch (e: any) { Alert.alert('Could not delete', e?.response?.data?.message || 'Please try again.'); }
+          catch (e: any) { Alert.alert('Could not delete', getErrorMessage(e, 'Please try again.')); }
         },
       },
     ]);

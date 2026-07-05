@@ -7,6 +7,7 @@ import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../../store';
 import { setSession } from '../../store/slices/authSlice';
 import { onboardingApi } from '../../services/api';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 export default function OnboardingRegisterScreen({ navigation }: any) {
   const dispatch = useDispatch<AppDispatch>();
@@ -31,7 +32,7 @@ export default function OnboardingRegisterScreen({ navigation }: any) {
       setPrefill({ designation: data.designation, department: data.department, tempEmployeeId: data.tempEmployeeId });
       setStep(2);
     } catch (e: any) {
-      Alert.alert('Invalid invite', e?.response?.data?.message || 'Check your email and code.');
+      Alert.alert('Invalid invite', getErrorMessage(e, 'Check your email and code.'));
     } finally { setBusy(false); }
   };
 
@@ -54,7 +55,7 @@ export default function OnboardingRegisterScreen({ navigation }: any) {
         { text: 'Get started', onPress: () => dispatch(setSession({ access_token: data.access_token, user: data.user, employee: data.employee })) },
       ]);
     } catch (e: any) {
-      Alert.alert('Could not complete', e?.response?.data?.message || 'Please try again.');
+      Alert.alert('Could not complete', getErrorMessage(e, 'Please try again.'));
     } finally { setBusy(false); }
   };
 

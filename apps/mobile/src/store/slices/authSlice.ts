@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi } from '../../services/api';
 import { AuthState, User } from '../../types';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 /** Infer a role from the email when the API doesn't supply one (demo / legacy tokens). */
 export function roleFromEmail(email: string): User['role'] {
@@ -62,7 +63,7 @@ export const login = createAsyncThunk(
         await AsyncStorage.setItem('access_token', demo.access_token);
         return demo;
       }
-      return rejectWithValue(err.response?.data?.message || 'Login failed');
+      return rejectWithValue(getErrorMessage(err, 'Login failed'));
     }
   },
 );

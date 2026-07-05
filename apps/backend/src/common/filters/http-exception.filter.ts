@@ -13,10 +13,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
+    // A NestJS HttpException's own response body is already the object
+    // { statusCode, message, error } (message may be a string, or a string[]
+    // from ValidationPipe). Unwrap that inner `message` instead of nesting the
+    // whole object under our own `message` key below -- otherwise every
+    // client's `err.response.data.message` is an object rather than the
+    // string it expects, which crashes any UI that renders it directly.
+    const body = exception instanceof HttpException ? exception.getResponse() : null;
     const message =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : 'Internal server error';
+      typeof body === 'string'
+        ? body
+        : body && typeof body === 'object' && 'message' in (body as Record<string, unknown>)
+          ? (body as Record<string, unknown>).message
+          : exception instanceof HttpException
+            ? exception.message
+            : 'Internal server error';
 
     response.status(status).json({
       statusCode: status,

@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert, ScrollView, StatusBar,
 } from 'react-native';
 import { authApi } from '../../services/api';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 export default function ForgotPasswordScreen({ navigation }: any) {
   const [step, setStep] = useState<1 | 2>(1);
@@ -36,7 +37,7 @@ export default function ForgotPasswordScreen({ navigation }: any) {
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (e: any) {
-      Alert.alert('Reset failed', e?.response?.data?.message || 'Invalid or expired code.');
+      Alert.alert('Reset failed', getErrorMessage(e, 'Invalid or expired code.'));
     } finally { setBusy(false); }
   };
 

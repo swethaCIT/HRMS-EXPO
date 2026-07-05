@@ -5,6 +5,7 @@ import {
 import { PRESENCE_META, initialsOf, avatarColor, TeamMember } from '../../data/managerData';
 import { T, HR_PEOPLE } from '../../data/hrData';
 import { employeeApi, onboardingApi } from '../../services/api';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 export default function PeopleScreen({ navigation }: any) {
   const [q, setQ] = useState('');
@@ -31,7 +32,7 @@ export default function PeopleScreen({ navigation }: any) {
           (data.devCode ? `\n\nDev mode — invite code: ${data.devCode}` : '\n\nThey\'ll receive an email with a one-time code.'),
       );
     } catch (e: any) {
-      Alert.alert('Could not send invite', e?.response?.data?.message || 'Please try again.');
+      Alert.alert('Could not send invite', getErrorMessage(e, 'Please try again.'));
     } finally { setInviting(false); }
   };
 
