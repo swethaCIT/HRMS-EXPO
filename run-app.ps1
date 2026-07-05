@@ -30,12 +30,20 @@ if (-not (Test-Path (Join-Path $backendDir ".env"))) {
   exit 1
 }
 
+# --- 0. Dependencies (npm workspaces: always install from the repo root, so a
+#        package.json change anywhere is picked up - a merely-present
+#        node_modules folder can still be missing packages added since the
+#        last install) ---
+Write-Host "==> Dependencies" -ForegroundColor Cyan
+Set-Location $root
+npm install
+if ($LASTEXITCODE -ne 0) { Write-Host "    npm install failed - see the output above." -ForegroundColor Red; exit 1 }
+
 # --- 1. Backend ---
 Write-Host "==> Backend" -ForegroundColor Cyan
 Get-Process node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*\HRMS\*" } | Stop-Process -Force -ErrorAction SilentlyContinue
 Set-Location $backendDir
-if (-not (Test-Path "node_modules")) { npm install }
-if (-not (Test-Path "dist\main.js")) { npm run build }
+npm run build
 $env:NODE_ENV = "development"
 Start-Process -FilePath "node" -ArgumentList "dist/main.js" -WindowStyle Hidden `
   -RedirectStandardOutput "$backendDir\backend.log" -RedirectStandardError "$backendDir\backend.err.log"
@@ -76,7 +84,6 @@ Get-CimInstance Win32_Process -Filter "name='node.exe'" |
   Where-Object { $_.CommandLine -match 'react-native start|cli.js start' } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Set-Location $mobileDir
-if (-not (Test-Path "node_modules")) { npm install }
 Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx react-native start > metro.log 2>&1" -WindowStyle Minimized
 
 $metroOk = $false
