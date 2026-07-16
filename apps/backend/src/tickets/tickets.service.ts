@@ -8,6 +8,9 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { clampPaging } from '../common/utils/pagination';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
+import { MailService } from '../mail/mail.service';
+import { UsersService } from '../users/users.service';
+import { UserRole } from '../users/entities/user.entity';
 
 @Injectable()
 export class TicketsService {
@@ -18,6 +21,8 @@ export class TicketsService {
     private readonly ticketRepo: Repository<Ticket>,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly notifications: NotificationsService,
+    private readonly mail: MailService,
+    private readonly users: UsersService,
   ) {}
 
   private mineKey(userId: string) {
@@ -36,6 +41,7 @@ export class TicketsService {
     });
     const saved = await this.ticketRepo.save(ticket);
     await this.cache.del(this.mineKey(userId)); // reflect the new ticket immediately
+    await this.notifyRaised(saved);
     return saved;
   }
 
@@ -88,8 +94,30 @@ export class TicketsService {
     try {
       if (!ticket.createdById) return;
       await this.notifications.createForUser(ticket.createdById, title, body, NotificationType.TICKET);
+      const creator = await this.users.findOne(ticket.createdById).catch(() => null);
+      if (creator?.email) await this.mail.send(creator.email, title, body);
     } catch (err: any) {
       this.logger.error(`Failed to create ticket notification: ${err?.message}`);
+    }
+  }
+
+  /** Email the submitter a confirmation and alert HR/admin of the new ticket. Never breaks create(). */
+  private async notifyRaised(ticket: Ticket): Promise<void> {
+    try {
+      const creator = await this.users.findOne(ticket.createdById).catch(() => null);
+      if (creator?.email) {
+        await this.mail.send(
+          creator.email,
+          'Ticket submitted',
+          `Your ticket ${ticket.ticketId} — "${ticket.subject}" has been submitted and is pending approval.`,
+        );
+      }
+
+      const approvers = await this.users.findApprovers([UserRole.MANAGER, UserRole.HR, UserRole.ADMIN]);
+      const approverBody = `${creator?.email ?? 'An employee'} raised ticket ${ticket.ticketId} — "${ticket.subject}" (${ticket.priority} priority). Review it in the HR dashboard.`;
+      await Promise.all(approvers.map((a) => this.mail.send(a.email, 'New ticket pending approval', approverBody)));
+    } catch (err: any) {
+      this.logger.error(`Failed to send ticket-raised email: ${err?.message}`);
     }
   }
 

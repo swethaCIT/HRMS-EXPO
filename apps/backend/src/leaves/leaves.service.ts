@@ -7,6 +7,9 @@ import { Leave, LeaveStatus } from './entities/leave.entity';
 import { CreateLeaveDto } from './dto/create-leave.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
+import { MailService } from '../mail/mail.service';
+import { UsersService } from '../users/users.service';
+import { UserRole } from '../users/entities/user.entity';
 
 @Injectable()
 export class LeavesService {
@@ -17,6 +20,8 @@ export class LeavesService {
     private readonly leaveRepo: Repository<Leave>,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly notifications: NotificationsService,
+    private readonly mail: MailService,
+    private readonly users: UsersService,
   ) {}
 
   private balanceKey(employeeId: string) {
@@ -41,6 +46,7 @@ export class LeavesService {
     });
     const saved = await this.leaveRepo.save(leave);
     await this.cache.del(this.balanceKey(dto.employeeId));
+    await this.notifyApplied(saved.id);
     return saved;
   }
 
@@ -105,8 +111,35 @@ export class LeavesService {
       const userId = leave.employee?.user?.id;
       if (!userId) return;
       await this.notifications.createForUser(userId, title, body, NotificationType.LEAVE);
+      const email = leave.employee?.user?.email;
+      if (email) await this.mail.send(email, title, body);
     } catch (err: any) {
       this.logger.error(`Failed to create leave notification: ${err?.message}`);
+    }
+  }
+
+  /** Email the applicant a confirmation and alert HR/admin of the new request. Never breaks create(). */
+  private async notifyApplied(leaveId: string): Promise<void> {
+    try {
+      const leave = await this.leaveRepo.findOne({ where: { id: leaveId }, relations: { employee: { user: true } } });
+      if (!leave?.employee) return;
+      const range = `${this.fmtDate(leave.startDate)} to ${this.fmtDate(leave.endDate)}`;
+      const applicantName = `${leave.employee.firstName ?? ''} ${leave.employee.lastName ?? ''}`.trim() || 'An employee';
+
+      const applicantEmail = leave.employee.user?.email;
+      if (applicantEmail) {
+        await this.mail.send(
+          applicantEmail,
+          'Leave request submitted',
+          `Your ${leave.type} leave request (${range}, ${leave.totalDays} day(s)) has been submitted and is pending approval.`,
+        );
+      }
+
+      const approvers = await this.users.findApprovers([UserRole.MANAGER, UserRole.HR, UserRole.ADMIN]);
+      const approverBody = `${applicantName} applied for ${leave.type} leave (${range}, ${leave.totalDays} day(s)). Review it in the HR dashboard.`;
+      await Promise.all(approvers.map((a) => this.mail.send(a.email, 'New leave request pending approval', approverBody)));
+    } catch (err: any) {
+      this.logger.error(`Failed to send leave-applied email: ${err?.message}`);
     }
   }
 
