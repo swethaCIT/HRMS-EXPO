@@ -39,6 +39,17 @@ export class UsersService {
     return this.userRepo.findOne({ where: { email } });
   }
 
+  /**
+   * Users who can approve a request — the audience for "new request pending
+   * approval" emails. Defaults to HR + admin; pass roles explicitly to also
+   * include managers where they're allowed to approve (leaves, tickets).
+   */
+  async findApprovers(roles: UserRole[] = [UserRole.HR, UserRole.ADMIN]): Promise<User[]> {
+    return this.userRepo.find({
+      where: roles.map((role) => ({ role, isActive: true })),
+    });
+  }
+
   /** True if `user` is the only remaining active admin — demoting/deactivating
    * them would leave nobody able to manage users (this endpoint is admin-only),
    * a permanent lockout with no way back in except a manual DB fix. */
