@@ -235,6 +235,7 @@ export default function HRDashboardScreen({ navigation }: any) {
               { e: '🎫', l: 'Raise Ticket', go: 'RaiseTicket' },
               { e: '💰', l: 'Payslip',      go: 'Payroll' },
               { e: '🕒', l: 'Timesheet',    go: 'Timesheet' },
+              { e: '📝', l: 'Request',      go: 'CreateRequest' },
             ].map((q) => (
               <TouchableOpacity key={q.l} style={st.quickChip} activeOpacity={0.85} onPress={() => navigation?.navigate(q.go)}>
                 <Text style={st.quickEmoji}>{q.e}</Text>

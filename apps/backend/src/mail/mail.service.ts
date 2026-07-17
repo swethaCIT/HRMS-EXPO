@@ -22,9 +22,14 @@ export class MailService {
     this.from = config.get<string>('MAIL_FROM') || user || 'no-reply@hrms.app';
 
     if (user && pass) {
+      // Pooled connections: reuse a small set of SMTP sockets instead of opening a
+      // fresh one per email — cuts per-send latency and avoids bursting many
+      // concurrent connections at the provider when several recipients are notified
+      // for one event (applicant + every approver).
+      const pool = { pool: true, maxConnections: 3, maxMessages: 100 };
       this.transporter = host
-        ? nodemailer.createTransport({ host, port: config.get<number>('SMTP_PORT', 587), secure: false, auth: { user, pass } })
-        : nodemailer.createTransport({ service: 'gmail', auth: { user, pass } }); // Gmail App Password
+        ? nodemailer.createTransport({ host, port: config.get<number>('SMTP_PORT', 587), secure: false, auth: { user, pass }, ...pool })
+        : nodemailer.createTransport({ service: 'gmail', auth: { user, pass }, ...pool }); // Gmail App Password
       this.live = true;
       this.logger.log(`Mail configured (${host || 'gmail'})`);
     } else {

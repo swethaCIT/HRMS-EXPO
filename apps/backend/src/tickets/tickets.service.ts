@@ -41,7 +41,8 @@ export class TicketsService {
     });
     const saved = await this.ticketRepo.save(ticket);
     await this.cache.del(this.mineKey(userId)); // reflect the new ticket immediately
-    await this.notifyRaised(saved);
+    // Not awaited: see notifyRaised's own comment.
+    void this.notifyRaised(saved);
     return saved;
   }
 
@@ -74,9 +75,9 @@ export class TicketsService {
     const saved = await this.ticketRepo.save(ticket);
     if (ticket.createdById) await this.cache.del(this.mineKey(ticket.createdById));
     if (approval === 'Approved') {
-      await this.notify(ticket, 'Ticket approved', `Your ticket ${ticket.ticketId} — "${ticket.subject}" has been approved.`);
+      void this.notify(ticket, 'Ticket approved', `Your ticket ${ticket.ticketId} — "${ticket.subject}" has been approved.`);
     } else if (approval === 'Rejected') {
-      await this.notify(ticket, 'Ticket rejected', `Your ticket ${ticket.ticketId} — "${ticket.subject}" has been rejected.`);
+      void this.notify(ticket, 'Ticket rejected', `Your ticket ${ticket.ticketId} — "${ticket.subject}" has been rejected.`);
     }
     return saved;
   }
@@ -96,6 +97,7 @@ export class TicketsService {
       await this.notifications.createForUser(ticket.createdById, title, body, NotificationType.TICKET);
       const creator = await this.users.findOne(ticket.createdById).catch(() => null);
       if (creator?.email) await this.mail.send(creator.email, title, body);
+      if (creator?.fcmToken) await this.notifications.sendToDevice(creator.fcmToken, title, body, { type: 'ticket', ticketId: ticket.id });
     } catch (err: any) {
       this.logger.error(`Failed to create ticket notification: ${err?.message}`);
     }
@@ -105,17 +107,17 @@ export class TicketsService {
   private async notifyRaised(ticket: Ticket): Promise<void> {
     try {
       const creator = await this.users.findOne(ticket.createdById).catch(() => null);
-      if (creator?.email) {
-        await this.mail.send(
-          creator.email,
-          'Ticket submitted',
-          `Your ticket ${ticket.ticketId} — "${ticket.subject}" has been submitted and is pending approval.`,
-        );
-      }
+      const applicantSubject = 'Ticket submitted';
+      const applicantBody = `Your ticket ${ticket.ticketId} — "${ticket.subject}" has been submitted and is pending approval.`;
+      if (creator?.email) await this.mail.send(creator.email, applicantSubject, applicantBody);
+      if (creator?.fcmToken) await this.notifications.sendToDevice(creator.fcmToken, applicantSubject, applicantBody, { type: 'ticket', ticketId: ticket.id });
 
       const approvers = await this.users.findApprovers([UserRole.MANAGER, UserRole.HR, UserRole.ADMIN]);
+      const approverSubject = 'New ticket pending approval';
       const approverBody = `${creator?.email ?? 'An employee'} raised ticket ${ticket.ticketId} — "${ticket.subject}" (${ticket.priority} priority). Review it in the HR dashboard.`;
-      await Promise.all(approvers.map((a) => this.mail.send(a.email, 'New ticket pending approval', approverBody)));
+      await Promise.all(approvers.map((a) => this.mail.send(a.email, approverSubject, approverBody)));
+      const approverTokens = approvers.map((a) => a.fcmToken).filter((t): t is string => !!t);
+      await this.notifications.sendToMultiple(approverTokens, approverSubject, approverBody, { type: 'ticket', ticketId: ticket.id });
     } catch (err: any) {
       this.logger.error(`Failed to send ticket-raised email: ${err?.message}`);
     }

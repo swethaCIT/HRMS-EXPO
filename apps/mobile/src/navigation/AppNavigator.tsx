@@ -6,6 +6,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../store';
 import { managementKind, restoreSession } from '../store/slices/authSlice';
+import { registerPushToken, initPushListeners } from '../utils/pushNotifications';
+import { fetchNotifications } from '../store/slices/notificationsSlice';
 
 import LoginScreen      from '../screens/auth/LoginScreen';
 import DashboardScreen  from '../screens/dashboard/DashboardScreen';
@@ -17,6 +19,8 @@ import AssetsScreen     from '../screens/assets/AssetsScreen';
 import TicketsScreen    from '../screens/tickets/TicketsScreen';
 import RaiseTicketScreen from '../screens/tickets/RaiseTicketScreen';
 import TicketDetailScreen from '../screens/tickets/TicketDetailScreen';
+import CreateRequestScreen from '../screens/requests/CreateRequestScreen';
+import RegularizationScreen from '../screens/attendance/RegularizationScreen';
 
 import ManagerDashboardScreen from '../screens/manager/ManagerDashboardScreen';
 import ApprovalsScreen        from '../screens/manager/ApprovalsScreen';
@@ -82,6 +86,8 @@ const LEAF_SCREENS: [string, React.ComponentType<any>][] = [
   ['MyTickets', TicketsScreen],
   ['RaiseTicket', RaiseTicketScreen],
   ['TicketDetail', TicketDetailScreen],
+  ['CreateRequest', CreateRequestScreen],
+  ['Regularization', RegularizationScreen],
   ['TeamMember', TeamMemberDetailScreen],
   ['Notifications', NotificationsScreen],
   ['Holidays', HolidaysScreen],
@@ -207,6 +213,18 @@ export default function AppNavigator() {
 
   // Restore a saved session on launch (persistent login).
   useEffect(() => { dispatch(restoreSession()); }, [dispatch]);
+
+  // Foreground push listener — set up once, independent of login state so a
+  // token refresh mid-session is still caught. No-ops if no Firebase project
+  // is configured (see pushNotifications.ts).
+  useEffect(() => {
+    const unsubscribe = initPushListeners(() => { dispatch(fetchNotifications()); });
+    return unsubscribe;
+  }, [dispatch]);
+
+  // Register this device's push token with the backend once signed in, so
+  // leave/ticket/request/regularization events can reach it.
+  useEffect(() => { if (token) registerPushToken(); }, [token]);
 
   if (booting && !token) {
     return (

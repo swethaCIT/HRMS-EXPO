@@ -310,15 +310,19 @@ export default function DashboardScreen({ navigation }: any) {
               { emoji: '💳', label: 'Payslip' },
               { emoji: '⏱',  label: 'Timesheet' },
               { emoji: '📦', label: 'Assets' },
+              { emoji: '📝', label: 'Request' },
+              { emoji: '⏱️', label: 'Regularize' },
             ].map((item) => (
               <TouchableOpacity
                 key={item.label}
                 style={styles.quickChip}
                 activeOpacity={0.8}
                 onPress={() => {
-                  if (item.label === 'Assets')    navigation?.navigate('Assets');
-                  if (item.label === 'Payslip')   navigation?.navigate('Payroll');
-                  if (item.label === 'Timesheet') navigation?.navigate('Timesheet');
+                  if (item.label === 'Assets')     navigation?.navigate('Assets');
+                  if (item.label === 'Payslip')    navigation?.navigate('Payroll');
+                  if (item.label === 'Timesheet')  navigation?.navigate('Timesheet');
+                  if (item.label === 'Request')    navigation?.navigate('CreateRequest');
+                  if (item.label === 'Regularize') navigation?.navigate('Regularization');
                 }}
               >
                 <Text style={styles.quickEmoji}>{item.emoji}</Text>

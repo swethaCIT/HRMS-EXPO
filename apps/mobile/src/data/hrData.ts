@@ -18,8 +18,8 @@ const EXTRA_PEOPLE: TeamMember[] = [
 
 export const HR_PEOPLE: TeamMember[] = [...TEAM, ...EXTRA_PEOPLE];
 
-/* ── HR request inbox (documents, letters, profile changes, onboarding) ── */
-export type HRRequestKind = 'document' | 'leave' | 'profile' | 'onboarding';
+/* ── HR request inbox (documents, letters, profile changes, onboarding, assets) ── */
+export type HRRequestKind = 'document' | 'leave' | 'profile' | 'onboarding' | 'asset';
 export type HRRequestStatus = 'pending' | 'issued' | 'rejected';
 
 export const HR_KIND_META: Record<HRRequestKind, { label: string; icon: string; tint: keyof typeof TINT; action: string }> = {
@@ -27,6 +27,7 @@ export const HR_KIND_META: Record<HRRequestKind, { label: string; icon: string; 
   leave:      { label: 'Leave Approval',   icon: '🏖️', tint: 'amber',  action: 'Approve' },
   profile:    { label: 'Profile Change',   icon: '✏️', tint: 'purple', action: 'Approve' },
   onboarding: { label: 'Onboarding',       icon: '🚀', tint: 'green',  action: 'Complete' },
+  asset:      { label: 'Asset Request',    icon: '📦', tint: 'blue',   action: 'Issue' },
 };
 
 export interface HRRequest {

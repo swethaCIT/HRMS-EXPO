@@ -107,6 +107,8 @@ export interface ApprovalItem {
   leaveId?: string;
   /** Present when this item is backed by a real DB ticket row (enables real approve/reject). */
   ticketId?: string;
+  /** Present when this item is backed by a real DB regularization row (enables real approve/reject). */
+  regularizationId?: string;
   /** Audit trail (populated once a decision is made). */
   decidedAt?: string;
   decisionNote?: string;
