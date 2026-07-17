@@ -12,6 +12,7 @@ export default function PeopleScreen({ navigation }: any) {
   const [dept, setDept] = useState<'All' | string>('All');
   const [people, setPeople] = useState<TeamMember[]>(HR_PEOPLE);
   const [live, setLive] = useState(false);
+  const [offline, setOffline] = useState(false);
 
   // ── New-hire onboarding invite ──
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -57,7 +58,8 @@ export default function PeopleScreen({ navigation }: any) {
           setPeople(mapped);
           setLive(true);
         }
-      } catch { /* keep mock fallback */ }
+        setOffline(false);
+      } catch { setOffline(true); /* keep mock fallback */ }
     })();
   }, []);
 
@@ -112,6 +114,12 @@ export default function PeopleScreen({ navigation }: any) {
       </View>
 
       <ScrollView style={st.body} contentContainerStyle={{ padding: 16, paddingBottom: 96 }} showsVerticalScrollIndicator={false}>
+        {offline && (
+          <View style={st.offline}>
+            <View style={st.offlineDot} />
+            <Text style={st.offlineTx}>Backend unreachable · showing demo data</Text>
+          </View>
+        )}
         {list.length === 0 && (
           <View style={st.empty}><Text style={{ fontSize: 38 }}>🔍</Text><Text style={st.emptyTx}>No employees match</Text></View>
         )}
@@ -186,6 +194,9 @@ const st = StyleSheet.create({
   chipTxActive: { color: '#FFF' },
 
   body: { flex: 1 },
+  offline: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.amber.bg, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12 },
+  offlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: T.amber.solid },
+  offlineTx: { fontSize: 12, color: T.amber.fg, fontWeight: '600' },
   card: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: T.card, borderRadius: 14, padding: 14, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   avatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   avatarTx: { color: '#FFF', fontWeight: '700', fontSize: 16 },
