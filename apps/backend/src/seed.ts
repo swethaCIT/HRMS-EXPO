@@ -83,16 +83,29 @@ const PEOPLE: SeedPerson[] = [
 ];
 
 async function main() {
+  // Mirrors config/database.config.ts: DATABASE_URL (hosted, e.g. Supabase) if
+  // set, otherwise fall back to the local Docker Postgres discrete DB_* vars.
   const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL is not set in apps/backend/.env');
+  const entities = [User, Employee, Attendance, Leave, Payroll, Notification, Ticket, Asset, Request, Holiday, Announcement];
 
-  const ds = new DataSource({
-    type: 'postgres',
-    url,
-    ssl: { rejectUnauthorized: false },
-    entities: [User, Employee, Attendance, Leave, Payroll, Notification, Ticket, Asset, Request, Holiday, Announcement],
-    synchronize: true,
-  });
+  const ds = url
+    ? new DataSource({
+        type: 'postgres',
+        url,
+        ssl: { rejectUnauthorized: false },
+        entities,
+        synchronize: true,
+      })
+    : new DataSource({
+        type: 'postgres',
+        host: process.env.DB_HOST || 'localhost',
+        port: Number(process.env.DB_PORT) || 5432,
+        username: process.env.DB_USERNAME || 'hrms_user',
+        password: process.env.DB_PASSWORD || 'hrms_password',
+        database: process.env.DB_NAME || 'hrms_db',
+        entities,
+        synchronize: true,
+      });
 
   await ds.initialize();
   console.log('✅ Connected + schema synced (incl. tickets, assets, requests)');
