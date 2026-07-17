@@ -112,12 +112,13 @@ const BANK = {
 };
 
 /* ════════════════════════════════════════════════════════ */
-export default function PayrollScreen() {
+export default function PayrollScreen({ navigation }: any) {
   const employee = useSelector((st: RootState) => st.auth.employee);
   const [month, setMonth]       = useState(CURRENT.month);
   const [year, setYear]         = useState(CURRENT.year);
   const [picker, setPicker]     = useState<null | 'month' | 'year'>(null);
   const [slip, setSlip]         = useState<PaySlip>(CURRENT);
+  const [offline, setOffline]   = useState(false);
 
   // Pull the latest real payslip; rebuild the slip from the DB figures.
   useEffect(() => {
@@ -126,6 +127,7 @@ export default function PayrollScreen() {
       try {
         const { data } = await payrollApi.getByEmployee(employee.id);
         const p = Array.isArray(data) ? data[0] : data;
+        setOffline(false);
         if (p) {
           const n = (v: any) => Number(v) || 0;
           setSlip({
@@ -147,7 +149,7 @@ export default function PayrollScreen() {
           setMonth((n(p.month) || 6) - 1);
           setYear(n(p.year) || 2026);
         }
-      } catch { /* keep mock */ }
+      } catch { setOffline(true); /* keep mock */ }
     })();
   }, [employee?.id]);
 
@@ -175,6 +177,13 @@ export default function PayrollScreen() {
 
       {/* ── Header ── */}
       <View style={s.header}>
+        <TouchableOpacity
+          style={s.iconBtn}
+          onPress={() => navigation?.canGoBack?.() && navigation.goBack()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Text style={s.backArrow}>←</Text>
+        </TouchableOpacity>
         <Text style={s.headerTitle}>Payslip</Text>
         <View style={s.headerActions}>
           <TouchableOpacity style={s.dlBtn} onPress={() => download('PDF')}>
@@ -207,6 +216,13 @@ export default function PayrollScreen() {
       </View>
 
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+
+        {offline && (
+          <View style={s.offline}>
+            <View style={s.offlineDot} />
+            <Text style={s.offlineTx}>Backend unreachable · showing demo data</Text>
+          </View>
+        )}
 
         {/* ── Net Pay hero ── */}
         <View style={s.netCard}>
@@ -443,7 +459,9 @@ const s = StyleSheet.create({
     paddingTop: 48, paddingBottom: 16, paddingHorizontal: 20,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
-  headerTitle:   { fontSize: 20, fontWeight: '700', color: '#FFF' },
+  iconBtn:       { width: 32, alignItems: 'flex-start' },
+  backArrow:     { fontSize: 24, color: '#FFF', fontWeight: '600' },
+  headerTitle:   { flex: 1, fontSize: 20, fontWeight: '700', color: '#FFF' },
   headerActions: { flexDirection: 'row', gap: 8 },
   dlBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -469,6 +487,11 @@ const s = StyleSheet.create({
   filterArrow:  { fontSize: 12, color: 'rgba(255,255,255,0.7)' },
 
   scroll: { flex: 1 },
+
+  /* offline banner */
+  offline: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FEF3C7', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginHorizontal: 16, marginTop: 12 },
+  offlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#F59E0B' },
+  offlineTx: { fontSize: 12, color: '#B45309', fontWeight: '600' },
 
   /* net hero */
   netCard: {

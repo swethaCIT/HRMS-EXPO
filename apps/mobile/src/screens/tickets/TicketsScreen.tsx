@@ -96,13 +96,15 @@ const FILTERS: ('All' | TicketStatus)[] = ['All', 'Open', 'In Progress', 'Resolv
 export default function TicketsScreen({ navigation }: any) {
   const [tickets, setTickets] = useState<Ticket[]>(INITIAL);
   const [filter, setFilter]   = useState<'All' | TicketStatus>('All');
+  const [offline, setOffline] = useState(false);
 
   /* fetch my real tickets on mount (fall back to mock when offline) */
   const loadTickets = React.useCallback(async () => {
     try {
       const { data } = await ticketApi.getMine();
       if (Array.isArray(data)) setTickets(data.map(mapTicket));
-    } catch { /* keep mock */ }
+      setOffline(false);
+    } catch { setOffline(true); /* keep mock */ }
   }, []);
 
   /* Refetch on focus, then keep polling every 15s while this screen stays
@@ -172,6 +174,12 @@ export default function TicketsScreen({ navigation }: any) {
 
       {/* ── Ticket list ── */}
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 96, paddingTop: 8 }}>
+        {offline && (
+          <View style={s.offline}>
+            <View style={s.offlineDot} />
+            <Text style={s.offlineTx}>Backend unreachable · showing demo data</Text>
+          </View>
+        )}
         {visible.length === 0 && (
           <View style={s.empty}>
             <Text style={{ fontSize: 38 }}>🎫</Text>
@@ -278,6 +286,11 @@ const s = StyleSheet.create({
   filterTextActive: { color: '#FFF' },
 
   scroll: { flex: 1 },
+
+  /* offline banner */
+  offline: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FEF3C7', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginHorizontal: 16, marginBottom: 12, marginTop: 8 },
+  offlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#F59E0B' },
+  offlineTx: { fontSize: 12, color: '#B45309', fontWeight: '600' },
 
   /* card */
   card: {

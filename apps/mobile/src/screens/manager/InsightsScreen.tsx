@@ -120,9 +120,11 @@ function Delta({ value, suffix = '%', invert = false }: { value: number; suffix?
 export default function InsightsScreen() {
   const [sum, setSum] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [offline, setOffline] = useState(false);
 
   const load = useCallback(async () => {
-    try { const { data } = await analyticsApi.summary(); setSum(data); } catch { /* keep mock */ }
+    try { const { data } = await analyticsApi.summary(); setSum(data); setOffline(false); }
+    catch { setOffline(true); /* keep mock */ }
   }, []);
   useEffect(() => { load(); }, [load]);
   const onRefresh = useCallback(async () => {
@@ -187,6 +189,13 @@ export default function InsightsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} colors={[T.primary]} />}
       >
+        {offline && (
+          <View style={st.offline}>
+            <View style={st.offlineDot} />
+            <Text style={st.offlineTx}>Backend unreachable · showing demo data</Text>
+          </View>
+        )}
+
         {/* KPI cards with WoW delta */}
         <View style={st.kpiRow}>
           {[
@@ -362,6 +371,9 @@ const st = StyleSheet.create({
   hSub: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
 
   body: { flex: 1 },
+  offline: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.amber.bg, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 14 },
+  offlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: T.amber.solid },
+  offlineTx: { fontSize: 12, color: T.amber.fg, fontWeight: '600' },
   kpiRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   kpiCard: { flex: 1, borderRadius: 14, padding: 14, alignItems: 'center' },
   kpiVal: { fontSize: 22, fontWeight: '800' },
