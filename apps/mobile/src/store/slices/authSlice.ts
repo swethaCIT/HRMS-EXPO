@@ -6,10 +6,12 @@ import { getErrorMessage } from '../../utils/errorMessage';
 
 /** Infer a role from the email when the API doesn't supply one (demo / legacy tokens). */
 export function roleFromEmail(email: string): User['role'] {
-  const e = (email || '').toLowerCase();
-  if (e.startsWith('admin') || e.includes('admin')) return 'admin';
-  if (e.includes('hr')) return 'hr';
-  if (e.includes('manager') || e.includes('lead') || e.includes('head') || e.includes('mgr')) return 'manager';
+  // Only inspect the local part (before `@`) — checking the full string lets domains
+  // like "hrms.com" false-match "hr" and misclassify e.g. employee@hrms.com as HR.
+  const local = (email || '').toLowerCase().split('@')[0];
+  if (local.includes('admin')) return 'admin';
+  if (local.includes('hr')) return 'hr';
+  if (local.includes('manager') || local.includes('lead') || local.includes('head') || local.includes('mgr')) return 'manager';
   return 'employee';
 }
 
