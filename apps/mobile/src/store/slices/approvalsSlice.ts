@@ -1,10 +1,11 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { ApprovalItem } from '../../data/managerData';
-import { leaveApi, leaveApprovalApi, ticketApi, employeeApi } from '../../services/api';
+import { leaveApi, leaveApprovalApi, ticketApi, employeeApi, regularizationApi } from '../../services/api';
 
 interface ApprovalsState {
   items: ApprovalItem[];
   loading: boolean;
+  offline: boolean;
 }
 
 // Start empty — the inbox is populated purely from real backend leaves + tickets,
@@ -12,6 +13,7 @@ interface ApprovalsState {
 const initialState: ApprovalsState = {
   items: [],
   loading: false,
+  offline: false,
 };
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
@@ -88,19 +90,56 @@ function mapTicket(t: any, empMap: Record<string, EmpInfo>): ApprovalItem {
   };
 }
 
-// Pull real leaves + tickets and turn them into a single approvals inbox.
+const fmtTime = (d?: string | null) => {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); } catch { return '—'; }
+};
+
+/** Map a backend regularization row into an approval inbox item. */
+function mapRegularization(r: any): ApprovalItem {
+  const emp = r.employee;
+  const name = emp ? `${emp.firstName ?? ''} ${emp.lastName ?? ''}`.trim() : 'Employee';
+  const status = r.status === 'approved' ? 'approved' : r.status === 'rejected' ? 'rejected' : 'pending';
+  return {
+    id: `regularization-${r.id}`,
+    regularizationId: r.id,
+    kind: 'regularization',
+    employeeName: name || (emp?.employeeId ?? 'Employee'),
+    employeeId: emp?.employeeId ?? '',
+    title: `Attendance correction · ${fmt(r.date)}`,
+    subtitle: `In ${fmtTime(r.requestedCheckIn)} – Out ${fmtTime(r.requestedCheckOut)}`,
+    meta: fmt(r.date),
+    submittedAt: 'recently',
+    status,
+    reason: r.reason,
+    decidedAt: r.decidedAt ? fmt(r.decidedAt) : undefined,
+    decisionNote: r.decisionNote || undefined,
+    detail: [
+      { k: 'Date', v: fmt(r.date) },
+      { k: 'Requested check-in', v: fmtTime(r.requestedCheckIn) },
+      { k: 'Requested check-out', v: fmtTime(r.requestedCheckOut) },
+    ],
+  };
+}
+
+// Pull real leaves + tickets + regularizations and turn them into a single approvals inbox.
+// `offline` is true whenever any of them couldn't be fetched at all, so the
+// screen can tell "genuinely nothing pending" apart from "couldn't reach the server".
 export const fetchApprovals = createAsyncThunk('approvals/fetch', async () => {
-  const [leavesRes, ticketsRes, empRes] = await Promise.allSettled([
+  const [leavesRes, ticketsRes, regsRes, empRes] = await Promise.allSettled([
     leaveApi.getAll(),
     ticketApi.getAll(),
+    regularizationApi.getAll(),
     employeeApi.getAll(),
   ]);
   const employees = empRes.status === 'fulfilled' ? (empRes.value.data as any[]) : [];
   const empMap = buildEmpMap(employees);
   const leaves = leavesRes.status === 'fulfilled' ? (leavesRes.value.data as any[]).map(mapLeave) : [];
   const tickets = ticketsRes.status === 'fulfilled' ? (ticketsRes.value.data as any[]).map((t) => mapTicket(t, empMap)) : [];
-  // Pending first, then most-recent-looking; leaves and tickets interleaved by status.
-  return [...leaves, ...tickets];
+  const regularizations = regsRes.status === 'fulfilled' ? (regsRes.value.data as any[]).map(mapRegularization) : [];
+  const offline = leavesRes.status === 'rejected' || ticketsRes.status === 'rejected' || regsRes.status === 'rejected';
+  // Pending first, then most-recent-looking; leaves, tickets and regularizations interleaved by status.
+  return { items: [...leaves, ...tickets, ...regularizations], offline };
 });
 
 const approvalsSlice = createSlice({
@@ -113,6 +152,7 @@ const approvalsSlice = createSlice({
       it.status = 'approved';
       if (it.leaveId) leaveApprovalApi.approve(it.leaveId).catch(() => {});
       if (it.ticketId) ticketApi.approve(it.ticketId).catch(() => {});
+      if (it.regularizationId) regularizationApi.approve(it.regularizationId).catch(() => {});
     },
     reject: (state, action: PayloadAction<string | { id: string; reason?: string }>) => {
       const id = typeof action.payload === 'string' ? action.payload : action.payload.id;
@@ -123,6 +163,7 @@ const approvalsSlice = createSlice({
       if (it.reason == null && reason) it.reason = reason;
       if (it.leaveId) leaveApprovalApi.reject(it.leaveId, reason).catch(() => {});
       if (it.ticketId) ticketApi.reject(it.ticketId).catch(() => {});
+      if (it.regularizationId) regularizationApi.reject(it.regularizationId, reason).catch(() => {});
     },
     approveAllPending: (state) => {
       state.items.forEach((i) => {
@@ -130,6 +171,7 @@ const approvalsSlice = createSlice({
         i.status = 'approved';
         if (i.leaveId) leaveApprovalApi.approve(i.leaveId).catch(() => {});
         if (i.ticketId) ticketApi.approve(i.ticketId).catch(() => {});
+        if (i.regularizationId) regularizationApi.approve(i.regularizationId).catch(() => {});
       });
     },
   },
@@ -138,9 +180,12 @@ const approvalsSlice = createSlice({
       .addCase(fetchApprovals.pending, (state) => { state.loading = true; })
       .addCase(fetchApprovals.fulfilled, (state, action) => {
         state.loading = false;
-        if (action.payload) state.items = action.payload;
+        if (action.payload) {
+          state.items = action.payload.items;
+          state.offline = action.payload.offline;
+        }
       })
-      .addCase(fetchApprovals.rejected, (state) => { state.loading = false; });
+      .addCase(fetchApprovals.rejected, (state) => { state.loading = false; state.offline = true; });
   },
 });
 

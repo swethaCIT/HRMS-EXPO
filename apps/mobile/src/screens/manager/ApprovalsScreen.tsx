@@ -25,6 +25,7 @@ const TABS: { key: Tab; label: string }[] = [
 export default function ApprovalsScreen({ navigation }: any) {
   const dispatch = useDispatch<AppDispatch>();
   const items = useSelector((s: RootState) => s.approvals.items);
+  const offline = useSelector((s: RootState) => s.approvals.offline);
   const [tab, setTab] = useState<Tab>('pending');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -111,10 +112,21 @@ export default function ApprovalsScreen({ navigation }: any) {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} colors={[T.primary]} />}
       >
+        {offline && (
+          <View style={st.offline}>
+            <View style={st.offlineDot} />
+            <Text style={st.offlineTx}>Backend unreachable · list may be incomplete or stale</Text>
+          </View>
+        )}
+
         {visible.length === 0 && (
           <View style={st.empty}>
-            <Text style={{ fontSize: 40 }}>{tab === 'pending' ? '🎉' : '📭'}</Text>
-            <Text style={st.emptyTx}>{tab === 'pending' ? 'All caught up — no pending approvals' : `No ${tab} requests`}</Text>
+            <Text style={{ fontSize: 40 }}>{offline ? '📡' : tab === 'pending' ? '🎉' : '📭'}</Text>
+            <Text style={st.emptyTx}>
+              {offline
+                ? "Couldn't reach the server — pull down to retry"
+                : tab === 'pending' ? 'All caught up — no pending approvals' : `No ${tab} requests`}
+            </Text>
           </View>
         )}
 
@@ -244,6 +256,10 @@ const st = StyleSheet.create({
   tabBadgeTxActive: { color: '#FFF' },
 
   body: { flex: 1 },
+
+  offline: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.amber.bg, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 14 },
+  offlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: T.amber.solid },
+  offlineTx: { fontSize: 12, color: T.amber.fg, fontWeight: '600' },
 
   card: { backgroundColor: T.card, borderRadius: 16, padding: 14, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },

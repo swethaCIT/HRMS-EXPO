@@ -122,6 +122,14 @@ export const assetApi = {
   returnAsset: (id: string) => api.patch(`/assets/${id}/return`),
 };
 
+export const regularizationApi = {
+  create: (data: any) => api.post('/regularizations', data),
+  getByEmployee: (employeeId: string) => api.get(`/regularizations/employee/${employeeId}`),
+  getAll: () => api.get('/regularizations'),
+  approve: (id: string) => api.patch(`/regularizations/${id}/approve`),
+  reject: (id: string, reason?: string) => api.patch(`/regularizations/${id}/reject`, { reason }),
+};
+
 export const requestApi = {
   getAll: () => api.get('/requests'),
   getMine: () => api.get('/requests/mine'),
