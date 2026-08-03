@@ -43,6 +43,22 @@ import Icon, { IconName }    from '../components/Icon';
 import ForgotPasswordScreen     from '../screens/auth/ForgotPasswordScreen';
 import OnboardingRegisterScreen from '../screens/auth/OnboardingRegisterScreen';
 
+/* Goals — Azure-Boards-style project management (projects → teams → sprints → work items) */
+import ProjectsScreen         from '../screens/projects/ProjectsScreen';
+import ProjectDetailScreen    from '../screens/projects/ProjectDetailScreen';
+import ProjectBacklogScreen   from '../screens/projects/ProjectBacklogScreen';
+import ProjectBoardScreen     from '../screens/projects/ProjectBoardScreen';
+import ProjectSprintsScreen   from '../screens/projects/ProjectSprintsScreen';
+import SprintDetailScreen     from '../screens/projects/SprintDetailScreen';
+import ProjectReportsScreen   from '../screens/projects/ProjectReportsScreen';
+import MemberReportScreen     from '../screens/projects/MemberReportScreen';
+import TeamDetailScreen       from '../screens/projects/TeamDetailScreen';
+import WorkItemDetailScreen   from '../screens/projects/WorkItemDetailScreen';
+import CreateWorkItemScreen   from '../screens/projects/CreateWorkItemScreen';
+import CreateProjectScreen    from '../screens/projects/CreateProjectScreen';
+import CreateTeamScreen       from '../screens/projects/CreateTeamScreen';
+import MyWorkItemsScreen      from '../screens/projects/MyWorkItemsScreen';
+
 const RootStack = createNativeStackNavigator();
 const Tab       = createBottomTabNavigator();
 const Inner     = createNativeStackNavigator();
@@ -93,6 +109,21 @@ const LEAF_SCREENS: [string, React.ComponentType<any>][] = [
   ['Holidays', HolidaysScreen],
   ['Announcements', AnnouncementsScreen],
   ['Documents', DocumentsScreen],
+  /* Goals / project management board */
+  ['Projects', ProjectsScreen],
+  ['ProjectDetail', ProjectDetailScreen],
+  ['ProjectBacklog', ProjectBacklogScreen],
+  ['ProjectBoard', ProjectBoardScreen],
+  ['ProjectSprints', ProjectSprintsScreen],
+  ['SprintDetail', SprintDetailScreen],
+  ['ProjectReports', ProjectReportsScreen],
+  ['MemberReport', MemberReportScreen],
+  ['TeamDetail', TeamDetailScreen],
+  ['WorkItemDetail', WorkItemDetailScreen],
+  ['CreateWorkItem', CreateWorkItemScreen],
+  ['CreateProject', CreateProjectScreen],
+  ['CreateTeam', CreateTeamScreen],
+  ['MyWorkItems', MyWorkItemsScreen],
 ];
 
 /**

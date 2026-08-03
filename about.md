@@ -116,7 +116,35 @@ System administration and access control.
 | **User management** | Live list of all users from the database; **change a user's role**, **activate/deactivate** accounts — all persisted |
 | **People / Insights** | Org directory and analytics |
 
-### 4.5 Shared across roles
+### 4.5 Goals — project management board (Azure Boards-style PMS)
+
+A full delivery-management module reachable from a **"Goals" section on every role's home screen**. It mirrors the structure teams already know from Azure Boards / Jira, on a phone.
+
+**Hierarchy:** Project → Teams → Sprints (iterations) → **Epic → Feature → User Story → Task / Bug**
+
+| Screen | What it does |
+|---|---|
+| **Goals section (home)** | Portfolio roll-up (% delivered, active items), horizontal strip of project cards, "assigned to me" shortcut |
+| **Projects list** | Every project with progress, team/member counts, running sprint and overdue count; managers/HR/admin can create a project |
+| **Project board home** | Health hero, state mix (New/Active/Resolved/Closed), effort roll-up, live **sprint burndown**, team cards, iteration list |
+| **Backlog** | Collapsible **Epic → Feature → Story → Task** tree; every parent shows progress, effort and points **rolled up from all descendants**; filter by type or sprint |
+| **Board (kanban)** | One column per state; tap a card's arrow to move it through the workflow (writes straight to the DB) |
+| **Work item detail** | Azure-style card: state stepper, priority, assignee, **Original Estimate / Completed / Remaining**, story points, parent & children, dates, **log work** + time-entry history |
+| **Sprints** | Iteration list with completion; create a sprint (auto-queued after the previous one) |
+| **Sprint detail** | **Burndown (actual vs ideal)**, ahead/behind variance, effort logged per day, state mix, load per person, sprint backlog |
+| **Team detail** | The squad's manager, members with per-person workload, and the **team's own sprint burndown** (burndown scoped to that team) |
+| **Reports → Project** | Completion %, on-time %, avg cycle time, open bugs, contributors, effort (estimated/completed/remaining/logged), state donut, breakdown by type and priority, **velocity (committed vs completed per sprint)**, hours logged per week, per-team delivery |
+| **Reports → People** | Individual report per person: assigned / closed / active / overdue, points delivered, **hours logged**, share of total project effort, days engaged, avg hours per active day, on-time %, avg cycle time and estimate accuracy |
+| **Member report** | One person's full contribution — hours per day (14-day chart), assigned work and every time entry |
+| **My work items** | Everything assigned to the signed-in user across all boards, filterable by state |
+
+**States:** New · Active · Resolved · Closed · Removed — with timestamps captured on each transition, which is what powers cycle time, on-time reporting and the burndown curve.
+
+**Effort model:** original estimate, remaining work and completed work per item (hours), plus story points. Time entries are recorded against work items, so both project cost and individual contribution are real data, not estimates.
+
+**Permissions:** every signed-in user can read the boards, move items and log their own time; creating/deleting projects, teams, sprints and work items is restricted to Manager / HR / Admin. Assigning someone a work item notifies them in-app, by email and via push.
+
+### 4.6 Shared across roles
 - **Role-aware navigation** — the correct tabs appear for each role.
 - **"Switch view"** — managers/HR/admins can flip between their management console and their own personal employee view.
 - **Notification center** — common to all roles, actionable.

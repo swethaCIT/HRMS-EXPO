@@ -9,6 +9,7 @@ import { fetchHRRequests } from '../../store/slices/hrRequestsSlice';
 import { useLivePolling } from '../../utils/useLivePolling';
 import { announcementApi, holidayApi } from '../../services/api';
 import { initialsOf, avatarColor, PRESENCE_META } from '../../data/managerData';
+import GoalsSection from '../projects/GoalsSection';
 import {
   T, HR_PEOPLE, HR_KIND_META, TINT, NEW_JOINERS, CELEBRATIONS,
 } from '../../data/hrData';
@@ -208,6 +209,9 @@ export default function HRDashboardScreen({ navigation }: any) {
             </TouchableOpacity>
           );
         })()}
+
+        {/* goals (project boards) */}
+        <GoalsSection navigation={navigation} />
 
         {/* quick actions */}
         <View style={st.section}>

@@ -16,6 +16,7 @@ import { fetchNotifications } from '../../store/slices/notificationsSlice';
 import { attendanceApi, leaveApi, announcementApi, holidayApi } from '../../services/api';
 import { useLivePolling } from '../../utils/useLivePolling';
 import Icon from '../../components/Icon';
+import GoalsSection from '../projects/GoalsSection';
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; fg: string }> = {
   present: { label: 'ON TIME', bg: '#D1FAE5', fg: '#065F46' },
@@ -301,6 +302,9 @@ export default function DashboardScreen({ navigation }: any) {
             ))}
           </View>
         </View>
+
+        {/* ── Goals (project boards) ── */}
+        <GoalsSection navigation={navigation} />
 
         {/* ── Quick Actions ── */}
         <View style={styles.section}>

@@ -8,6 +8,7 @@ import { fetchNotifications } from '../../store/slices/notificationsSlice';
 import { userApi, analyticsApi, employeeApi } from '../../services/api';
 import { T, initialsOf, avatarColor } from '../../data/managerData';
 import Icon, { IconName } from '../../components/Icon';
+import GoalsSection from '../projects/GoalsSection';
 
 function greeting() {
   const h = new Date().getHours();
@@ -190,6 +191,9 @@ export default function AdminDashboardScreen({ navigation }: any) {
             })}
           </View>
         </View>
+
+        {/* Goals (project boards) */}
+        <GoalsSection navigation={navigation} />
 
         {/* Quick actions */}
         <View style={st.section}>
