@@ -10,6 +10,7 @@ import { useLivePolling } from '../../utils/useLivePolling';
 import {
   T, TEAM, PRESENCE_META, KIND_META, TINT, initialsOf, avatarColor,
 } from '../../data/managerData';
+import GoalsSection from '../projects/GoalsSection';
 import Icon from '../../components/Icon';
 import { announcementApi, holidayApi } from '../../services/api';
 
@@ -235,6 +236,9 @@ export default function ManagerDashboardScreen({ navigation }: any) {
             </View>
           ))}
         </View>
+
+        {/* ── Goals (project boards) ── */}
+        <GoalsSection navigation={navigation} />
 
         {/* ── Quick actions ── */}
         <View style={st.section}>

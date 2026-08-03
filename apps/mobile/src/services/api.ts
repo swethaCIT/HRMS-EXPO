@@ -138,6 +138,50 @@ export const requestApi = {
   reject: (id: string) => api.patch(`/requests/${id}/reject`),
 };
 
+/* ── Goals / project boards (Azure-Boards-style PMS) ── */
+
+export const projectApi = {
+  list: () => api.get('/projects'),
+  getOne: (id: string) => api.get(`/projects/${id}`),
+  create: (data: any) => api.post('/projects', data),
+  update: (id: string, data: any) => api.patch(`/projects/${id}`, data),
+  remove: (id: string) => api.delete(`/projects/${id}`),
+  // Teams
+  teams: (id: string) => api.get(`/projects/${id}/teams`),
+  createTeam: (id: string, data: any) => api.post(`/projects/${id}/teams`, data),
+  team: (teamId: string) => api.get(`/projects/teams/${teamId}`),
+  removeTeam: (teamId: string) => api.delete(`/projects/teams/${teamId}`),
+  addMember: (teamId: string, data: any) => api.post(`/projects/teams/${teamId}/members`, data),
+  removeMember: (memberId: string) => api.delete(`/projects/teams/members/${memberId}`),
+  // Sprints
+  sprints: (id: string) => api.get(`/projects/${id}/sprints`),
+  createSprint: (id: string, data: any) => api.post(`/projects/${id}/sprints`, data),
+  // Reports
+  report: (id: string) => api.get(`/projects/${id}/report`),
+  memberReports: (id: string) => api.get(`/projects/${id}/report/members`),
+  memberDetail: (id: string, employeeId: string) => api.get(`/projects/${id}/report/members/${employeeId}`),
+};
+
+export const sprintApi = {
+  // `teamId` narrows the burndown to a single squad's slice of the sprint.
+  burndown: (id: string, teamId?: string) => api.get(`/sprints/${id}/burndown`, { params: { teamId } }),
+  update: (id: string, data: any) => api.patch(`/sprints/${id}`, data),
+  remove: (id: string) => api.delete(`/sprints/${id}`),
+};
+
+export const workItemApi = {
+  list: (params: Record<string, string | undefined>) => api.get('/work-items', { params }),
+  tree: (projectId: string, sprintId?: string) => api.get('/work-items/tree', { params: { projectId, sprintId } }),
+  mine: () => api.get('/work-items/mine'),
+  getOne: (id: string) => api.get(`/work-items/${id}`),
+  create: (data: any) => api.post('/work-items', data),
+  update: (id: string, data: any) => api.patch(`/work-items/${id}`, data),
+  setState: (id: string, state: string, reason?: string) => api.patch(`/work-items/${id}/state`, { state, reason }),
+  remove: (id: string) => api.delete(`/work-items/${id}`),
+  logs: (id: string) => api.get(`/work-items/${id}/logs`),
+  logWork: (id: string, data: any) => api.post(`/work-items/${id}/logs`, data),
+};
+
 // Admin user management
 export const userApi = {
   getAll: () => api.get('/users'),

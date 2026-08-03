@@ -1,0 +1,343 @@
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { FindOptionsWhere, In, Repository } from 'typeorm';
+import { Project } from './entities/project.entity';
+import { ALLOWED_CHILDREN, WorkItem, WorkItemState, WorkItemType } from './entities/work-item.entity';
+import { WorkLog } from './entities/work-log.entity';
+import { CreateWorkItemDto, LogWorkDto, SetStateDto, UpdateWorkItemDto } from './dto/project.dto';
+import { round1 } from './util';
+import { Employee } from '../employees/entities/employee.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
+import { MailService } from '../mail/mail.service';
+
+export interface WorkItemFilter {
+  projectId?: string;
+  sprintId?: string;
+  teamId?: string;
+  assigneeId?: string;
+  parentId?: string;
+  type?: WorkItemType;
+  state?: WorkItemState;
+}
+
+const TYPE_LABEL: Record<WorkItemType, string> = {
+  [WorkItemType.EPIC]: 'Epic',
+  [WorkItemType.FEATURE]: 'Feature',
+  [WorkItemType.USER_STORY]: 'User Story',
+  [WorkItemType.TASK]: 'Task',
+  [WorkItemType.BUG]: 'Bug',
+};
+
+@Injectable()
+export class WorkItemsService {
+  private readonly logger = new Logger(WorkItemsService.name);
+
+  constructor(
+    @InjectRepository(WorkItem) private readonly itemRepo: Repository<WorkItem>,
+    @InjectRepository(WorkLog) private readonly logRepo: Repository<WorkLog>,
+    @InjectRepository(Project) private readonly projectRepo: Repository<Project>,
+    @InjectRepository(Employee) private readonly employeeRepo: Repository<Employee>,
+    private readonly notifications: NotificationsService,
+    private readonly mail: MailService,
+  ) {}
+
+  /* ── Reads ── */
+
+  async findAll(filter: WorkItemFilter) {
+    const where: FindOptionsWhere<WorkItem> = {};
+    if (filter.projectId) where.projectId = filter.projectId;
+    if (filter.sprintId) where.sprintId = filter.sprintId;
+    if (filter.teamId) where.teamId = filter.teamId;
+    if (filter.assigneeId) where.assigneeId = filter.assigneeId;
+    if (filter.parentId) where.parentId = filter.parentId;
+    if (filter.type) where.type = filter.type;
+    if (filter.state) where.state = filter.state;
+    return this.itemRepo.find({ where, order: { priority: 'ASC', seq: 'DESC' } });
+  }
+
+  /**
+   * The backlog tree: Epic → Feature → User Story → Task/Bug, with each level's
+   * effort and completion rolled up from its descendants (an epic's progress is
+   * the progress of everything underneath it, exactly like Azure Boards).
+   */
+  async tree(projectId: string, sprintId?: string) {
+    const items = (await this.itemRepo.find({ where: { projectId }, order: { seq: 'ASC' } })).filter(
+      (i) => i.state !== WorkItemState.REMOVED,
+    );
+    const scope = sprintId ? items.filter((i) => i.sprintId === sprintId) : items;
+    const inScope = new Set(scope.map((i) => i.id));
+
+    // Keep ancestors of in-scope items so a sprint filter still shows its tree.
+    const byId = new Map(items.map((i) => [i.id, i]));
+    if (sprintId) {
+      for (const i of scope) {
+        let p = i.parentId ? byId.get(i.parentId) : undefined;
+        while (p) {
+          inScope.add(p.id);
+          p = p.parentId ? byId.get(p.parentId) : undefined;
+        }
+      }
+    }
+
+    const visible = items.filter((i) => inScope.has(i.id));
+    const childrenOf = (parentId: string | null) =>
+      visible.filter((i) => (parentId === null ? !i.parentId || !byId.has(i.parentId) : i.parentId === parentId));
+
+    const build = (item: WorkItem): any => {
+      const kids = childrenOf(item.id).map(build);
+      const selfClosed = item.state === WorkItemState.CLOSED ? 1 : 0;
+      const totalCount = 1 + kids.reduce((s, k) => s + k.rollup.total, 0);
+      const closedCount = selfClosed + kids.reduce((s, k) => s + k.rollup.closed, 0);
+      return {
+        ...item,
+        children: kids,
+        rollup: {
+          total: totalCount,
+          closed: closedCount,
+          progress: Math.round((closedCount / totalCount) * 100),
+          estimated: round1((item.originalEstimate || 0) + kids.reduce((s, k) => s + k.rollup.estimated, 0)),
+          remaining: round1((item.remainingWork || 0) + kids.reduce((s, k) => s + k.rollup.remaining, 0)),
+          completed: round1((item.completedWork || 0) + kids.reduce((s, k) => s + k.rollup.completed, 0)),
+          points: round1((item.storyPoints || 0) + kids.reduce((s, k) => s + k.rollup.points, 0)),
+        },
+      };
+    };
+
+    return childrenOf(null).map(build);
+  }
+
+  async findOne(id: string) {
+    const item = await this.itemRepo.findOne({ where: { id } });
+    if (!item) throw new NotFoundException('Work item not found');
+    const [project, parent, children, logs] = await Promise.all([
+      this.projectRepo.findOne({ where: { id: item.projectId } }),
+      item.parentId ? this.itemRepo.findOne({ where: { id: item.parentId } }) : Promise.resolve(null),
+      this.itemRepo.find({ where: { parentId: id }, order: { seq: 'ASC' } }),
+      this.logRepo.find({ where: { workItemId: id }, order: { date: 'DESC' } }),
+    ]);
+    return {
+      ...item,
+      ref: project ? `${project.key}-${item.seq}` : `#${item.seq}`,
+      projectName: project?.name,
+      projectKey: project?.key,
+      parent: parent ? { id: parent.id, title: parent.title, type: parent.type, seq: parent.seq } : null,
+      children: children.filter((c) => c.state !== WorkItemState.REMOVED),
+      logs,
+      hoursLogged: round1(logs.reduce((s, l) => s + (l.hours || 0), 0)),
+      allowedChildTypes: ALLOWED_CHILDREN[item.type],
+    };
+  }
+
+  /** Everything assigned to one person, across every project. */
+  async findMine(employeeId: string) {
+    const items = await this.itemRepo.find({
+      where: { assigneeId: employeeId },
+      order: { state: 'ASC', priority: 'ASC' },
+    });
+    const live = items.filter((i) => i.state !== WorkItemState.REMOVED);
+    if (!live.length) return { items: [], stats: { total: 0, active: 0, closed: 0, remaining: 0 } };
+    const projects = await this.projectRepo.find({ where: { id: In([...new Set(live.map((i) => i.projectId))]) } });
+    const keyOf = new Map(projects.map((p) => [p.id, p]));
+    return {
+      items: live.map((i) => ({
+        ...i,
+        ref: `${keyOf.get(i.projectId)?.key ?? '#'}-${i.seq}`,
+        projectName: keyOf.get(i.projectId)?.name,
+      })),
+      stats: {
+        total: live.length,
+        active: live.filter((i) => i.state === WorkItemState.ACTIVE).length,
+        closed: live.filter((i) => i.state === WorkItemState.CLOSED).length,
+        remaining: round1(live.reduce((s, i) => s + (i.remainingWork || 0), 0)),
+      },
+    };
+  }
+
+  /* ── Writes ── */
+
+  async create(dto: CreateWorkItemDto, actor?: { id: string; name?: string }) {
+    const project = await this.projectRepo.findOne({ where: { id: dto.projectId } });
+    if (!project) throw new NotFoundException('Project not found');
+
+    let parent: WorkItem | null = null;
+    if (dto.parentId) {
+      parent = await this.itemRepo.findOne({ where: { id: dto.parentId } });
+      if (!parent) throw new NotFoundException('Parent work item not found');
+      if (!ALLOWED_CHILDREN[parent.type].includes(dto.type)) {
+        throw new BadRequestException(
+          `A ${TYPE_LABEL[parent.type]} cannot contain a ${TYPE_LABEL[dto.type]}. Allowed: ${ALLOWED_CHILDREN[parent.type]
+            .map((t) => TYPE_LABEL[t])
+            .join(', ') || 'nothing'}`,
+        );
+      }
+    }
+
+    const last = await this.itemRepo.findOne({ where: { projectId: dto.projectId }, order: { seq: 'DESC' } });
+    const estimate = dto.originalEstimate ?? 0;
+
+    const item = this.itemRepo.create({
+      ...dto,
+      seq: (last?.seq ?? 0) + 1,
+      // Inherit the parent's sprint/team unless the caller pinned its own.
+      sprintId: dto.sprintId ?? parent?.sprintId ?? undefined,
+      teamId: dto.teamId ?? parent?.teamId ?? undefined,
+      state: dto.state ?? WorkItemState.NEW,
+      priority: dto.priority ?? 2,
+      originalEstimate: estimate,
+      // Remaining starts at the estimate — that's what makes a burndown start full.
+      remainingWork: dto.remainingWork ?? estimate,
+      completedWork: 0,
+      startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+      targetDate: dto.targetDate ? new Date(dto.targetDate) : undefined,
+      createdById: actor?.id,
+      createdByName: actor?.name,
+      activatedAt: (dto.state ?? WorkItemState.NEW) === WorkItemState.ACTIVE ? new Date() : undefined,
+    });
+
+    const saved = await this.itemRepo.save(item);
+    if (saved.assigneeId) {
+      void this.notifyAssignee(saved, project.key, 'New work item assigned to you');
+    }
+    return saved;
+  }
+
+  async update(id: string, dto: UpdateWorkItemDto) {
+    const item = await this.itemRepo.findOne({ where: { id } });
+    if (!item) throw new NotFoundException('Work item not found');
+
+    if (dto.parentId && dto.parentId !== item.parentId) {
+      if (dto.parentId === id) throw new BadRequestException('A work item cannot be its own parent');
+      const parent = await this.itemRepo.findOne({ where: { id: dto.parentId } });
+      if (!parent) throw new NotFoundException('Parent work item not found');
+      const childType = dto.type ?? item.type;
+      if (!ALLOWED_CHILDREN[parent.type].includes(childType)) {
+        throw new BadRequestException(`A ${TYPE_LABEL[parent.type]} cannot contain a ${TYPE_LABEL[childType]}`);
+      }
+    }
+
+    const previousAssignee = item.assigneeId;
+    const previousState = item.state;
+
+    Object.assign(item, {
+      ...dto,
+      startDate: dto.startDate ? new Date(dto.startDate) : item.startDate,
+      targetDate: dto.targetDate ? new Date(dto.targetDate) : item.targetDate,
+    });
+    if (dto.state && dto.state !== previousState) this.stampState(item, dto.state);
+
+    const saved = await this.itemRepo.save(item);
+    if (saved.assigneeId && saved.assigneeId !== previousAssignee) {
+      const project = await this.projectRepo.findOne({ where: { id: saved.projectId } });
+      void this.notifyAssignee(saved, project?.key ?? '', 'Work item assigned to you');
+    }
+    return saved;
+  }
+
+  async setState(id: string, dto: SetStateDto) {
+    const item = await this.itemRepo.findOne({ where: { id } });
+    if (!item) throw new NotFoundException('Work item not found');
+    if (item.state === dto.state) return item;
+    this.stampState(item, dto.state);
+    if (dto.reason) item.reason = dto.reason;
+    const saved = await this.itemRepo.save(item);
+
+    const project = await this.projectRepo.findOne({ where: { id: saved.projectId } });
+    void this.notifyAssignee(saved, project?.key ?? '', `Work item moved to ${dto.state.toUpperCase()}`);
+    return saved;
+  }
+
+  /**
+   * Apply the state transition and its side effects:
+   * Active stamps the start, Resolved/Closed stamp the finish, and closing
+   * zeroes the remaining work so it drops out of the burndown.
+   */
+  private stampState(item: WorkItem, state: WorkItemState) {
+    item.state = state;
+    const now = new Date();
+    if (state === WorkItemState.ACTIVE) {
+      if (!item.activatedAt) item.activatedAt = now;
+      item.resolvedAt = null as any;
+      item.closedAt = null as any;
+      if (!item.remainingWork && item.originalEstimate) item.remainingWork = item.originalEstimate;
+    } else if (state === WorkItemState.RESOLVED) {
+      if (!item.activatedAt) item.activatedAt = now;
+      item.resolvedAt = now;
+      item.closedAt = null as any;
+    } else if (state === WorkItemState.CLOSED) {
+      if (!item.activatedAt) item.activatedAt = now;
+      if (!item.resolvedAt) item.resolvedAt = now;
+      item.closedAt = now;
+      item.remainingWork = 0;
+    } else if (state === WorkItemState.NEW) {
+      item.activatedAt = null as any;
+      item.resolvedAt = null as any;
+      item.closedAt = null as any;
+    } else if (state === WorkItemState.REMOVED) {
+      item.remainingWork = 0;
+    }
+  }
+
+  /** Soft delete: children are re-parented to this item's parent, never orphaned. */
+  async remove(id: string) {
+    const item = await this.itemRepo.findOne({ where: { id } });
+    if (!item) throw new NotFoundException('Work item not found');
+    await this.itemRepo.update({ parentId: id }, { parentId: (item.parentId ?? null) as any });
+    await this.logRepo.delete({ workItemId: id });
+    await this.itemRepo.delete({ id });
+    return { success: true };
+  }
+
+  /* ── Time tracking ── */
+
+  async logWork(id: string, dto: LogWorkDto, actor?: { employeeId?: string; name?: string }) {
+    const item = await this.itemRepo.findOne({ where: { id } });
+    if (!item) throw new NotFoundException('Work item not found');
+    const employeeId = dto.employeeId || actor?.employeeId || item.assigneeId;
+    if (!employeeId) throw new BadRequestException('No employee to log this time against');
+
+    const log = await this.logRepo.save(
+      this.logRepo.create({
+        workItemId: id,
+        projectId: item.projectId,
+        employeeId,
+        employeeName: dto.employeeName || actor?.name || item.assigneeName,
+        hours: dto.hours,
+        date: dto.date ? new Date(dto.date) : new Date(),
+        note: dto.note,
+      }),
+    );
+
+    item.completedWork = round1((item.completedWork || 0) + dto.hours);
+    item.remainingWork =
+      dto.remainingWork != null ? round1(dto.remainingWork) : round1(Math.max(0, (item.remainingWork || 0) - dto.hours));
+    // Logging time against an untouched item means work has actually started.
+    if (item.state === WorkItemState.NEW) this.stampState(item, WorkItemState.ACTIVE);
+    await this.itemRepo.save(item);
+
+    return { log, item };
+  }
+
+  listLogs(id: string) {
+    return this.logRepo.find({ where: { workItemId: id }, order: { date: 'DESC' } });
+  }
+
+  /** In-app + email + push to the assignee. Never breaks the write that triggered it. */
+  private async notifyAssignee(item: WorkItem, projectKey: string, title: string) {
+    try {
+      if (!item.assigneeId) return;
+      const employee = await this.employeeRepo.findOne({ where: { id: item.assigneeId }, relations: { user: true } });
+      const user = employee?.user;
+      if (!user?.id) return;
+      const ref = `${projectKey ? `${projectKey}-` : '#'}${item.seq}`;
+      const body = `${ref} · ${TYPE_LABEL[item.type]}: ${item.title}`;
+      await this.notifications.createForUser(user.id, title, body, NotificationType.INFO);
+      if (user.email) await this.mail.send(user.email, title, body);
+      if (user.fcmToken) {
+        await this.notifications.sendToDevice(user.fcmToken, title, body, { type: 'workItem', workItemId: item.id });
+      }
+    } catch (err: any) {
+      this.logger.error(`Failed to notify work-item assignee: ${err?.message}`);
+    }
+  }
+}

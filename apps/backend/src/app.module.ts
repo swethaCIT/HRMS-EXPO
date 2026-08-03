@@ -22,6 +22,7 @@ import { HolidaysModule } from './holidays/holidays.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { DocumentsModule } from './documents/documents.module';
 import { RegularizationsModule } from './regularizations/regularizations.module';
+import { ProjectsModule } from './projects/projects.module';
 import { HealthController } from './health/health.controller';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
 import { getDatabaseConfig } from './config/database.config';
@@ -59,6 +60,7 @@ import { getDatabaseConfig } from './config/database.config';
     AnnouncementsModule,
     DocumentsModule,
     RegularizationsModule,
+    ProjectsModule,
   ],
   controllers: [HealthController],
   providers: [

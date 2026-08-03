@@ -27,6 +27,11 @@ import { Asset } from './assets/entities/asset.entity';
 import { Request } from './requests/entities/request.entity';
 import { Holiday } from './holidays/entities/holiday.entity';
 import { Announcement } from './announcements/entities/announcement.entity';
+import { Project, ProjectStatus } from './projects/entities/project.entity';
+import { ProjectTeam, ProjectTeamMember } from './projects/entities/project-team.entity';
+import { Sprint, SprintStatus } from './projects/entities/sprint.entity';
+import { WorkItem, WorkItemState, WorkItemType } from './projects/entities/work-item.entity';
+import { WorkLog } from './projects/entities/work-log.entity';
 
 dotenv.config();
 
@@ -86,7 +91,10 @@ async function main() {
   // Mirrors config/database.config.ts: DATABASE_URL (hosted, e.g. Supabase) if
   // set, otherwise fall back to the local Docker Postgres discrete DB_* vars.
   const url = process.env.DATABASE_URL;
-  const entities = [User, Employee, Attendance, Leave, Payroll, Notification, Ticket, Asset, Request, Holiday, Announcement];
+  const entities = [
+    User, Employee, Attendance, Leave, Payroll, Notification, Ticket, Asset, Request, Holiday, Announcement,
+    Project, ProjectTeam, ProjectTeamMember, Sprint, WorkItem, WorkLog,
+  ];
 
   const ds = url
     ? new DataSource({
@@ -313,6 +321,276 @@ async function main() {
       }),
     ]);
     console.log('✅ 3 announcements');
+  }
+
+  /* ── Project boards ("Goals"): projects → teams → sprints → epic/feature/story/task ── */
+  const projectRepo = ds.getRepository(Project);
+  const projectTeamRepo = ds.getRepository(ProjectTeam);
+  const projectMemberRepo = ds.getRepository(ProjectTeamMember);
+  const sprintRepo = ds.getRepository(Sprint);
+  const workItemRepo = ds.getRepository(WorkItem);
+  const workLogRepo = ds.getRepository(WorkLog);
+
+  if ((await projectRepo.count()) === 0) {
+    const emps = await employeeRepo.find();
+    const byCode = (code: string) => emps.find((e) => e.employeeId === code);
+    const nameOf = (e?: Employee) => (e ? `${e.firstName} ${e.lastName}` : 'Unassigned');
+    const admin = byCode('EMP001');
+    const hr = byCode('EMP002');
+    const mgr = byCode('EMP003');
+    const dev = byCode('EMP004');
+
+    const DAY = 86_400_000;
+    const day = (offset: number) => new Date(Date.now() + offset * DAY);
+    const managerUser = await userRepo.findOne({ where: { email: 'manager@hrms.com' } });
+
+    /** One backlog node — mirrors the Azure hierarchy and its effort fields. */
+    interface Node {
+      type: WorkItemType;
+      title: string;
+      description?: string;
+      state: WorkItemState;
+      points?: number;
+      estimate?: number;
+      who?: Employee;
+      /** Days from today the item was closed (negative = in the past). */
+      closedOffset?: number;
+      priority?: number;
+      children?: Node[];
+    }
+
+    const atlasBacklog: Node[] = [
+      {
+        type: WorkItemType.EPIC, title: 'Unified payments experience', state: WorkItemState.ACTIVE, priority: 1,
+        description: 'One checkout flow across web and mobile, with saved cards and instant refunds.',
+        children: [
+          {
+            type: WorkItemType.FEATURE, title: 'Card checkout', state: WorkItemState.ACTIVE, priority: 1, who: mgr,
+            children: [
+              {
+                type: WorkItemType.USER_STORY, title: 'As a customer I can save a card for later', state: WorkItemState.ACTIVE,
+                points: 5, who: dev, priority: 1,
+                children: [
+                  { type: WorkItemType.TASK, title: 'Tokenise card on save', state: WorkItemState.CLOSED, estimate: 8, who: dev, closedOffset: -5 },
+                  { type: WorkItemType.TASK, title: 'Card vault API endpoint', state: WorkItemState.ACTIVE, estimate: 10, who: dev },
+                  { type: WorkItemType.TASK, title: 'Saved-cards UI on checkout', state: WorkItemState.NEW, estimate: 6, who: hr },
+                ],
+              },
+              {
+                type: WorkItemType.USER_STORY, title: 'As a customer I complete 3-D Secure step-up', state: WorkItemState.RESOLVED,
+                points: 8, who: mgr, priority: 2,
+                children: [
+                  { type: WorkItemType.TASK, title: 'Integrate ACS redirect', state: WorkItemState.CLOSED, estimate: 12, who: mgr, closedOffset: -4 },
+                  { type: WorkItemType.BUG, title: 'Step-up loops on Safari 17', state: WorkItemState.ACTIVE, estimate: 5, who: dev, priority: 1 },
+                ],
+              },
+            ],
+          },
+          {
+            type: WorkItemType.FEATURE, title: 'Instant refunds', state: WorkItemState.NEW, priority: 2, who: mgr,
+            children: [
+              {
+                type: WorkItemType.USER_STORY, title: 'As an agent I can issue a partial refund', state: WorkItemState.NEW,
+                points: 5, who: hr,
+                children: [
+                  { type: WorkItemType.TASK, title: 'Partial refund calculation', state: WorkItemState.NEW, estimate: 8, who: hr },
+                  { type: WorkItemType.TASK, title: 'Refund audit trail', state: WorkItemState.NEW, estimate: 4, who: admin },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: WorkItemType.EPIC, title: 'Platform reliability', state: WorkItemState.ACTIVE, priority: 2,
+        description: 'Get the payments API to 99.95% availability.',
+        children: [
+          {
+            type: WorkItemType.FEATURE, title: 'Observability baseline', state: WorkItemState.ACTIVE, who: admin,
+            children: [
+              {
+                type: WorkItemType.USER_STORY, title: 'As an on-call engineer I get paged on error spikes', state: WorkItemState.CLOSED,
+                points: 3, who: admin, closedOffset: -3,
+                children: [
+                  { type: WorkItemType.TASK, title: 'Structured request logging', state: WorkItemState.CLOSED, estimate: 6, who: admin, closedOffset: -6 },
+                  { type: WorkItemType.TASK, title: 'Alert rules + escalation policy', state: WorkItemState.CLOSED, estimate: 4, who: admin, closedOffset: -3 },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const mobileBacklog: Node[] = [
+      {
+        type: WorkItemType.EPIC, title: 'Employee mobile revamp', state: WorkItemState.ACTIVE, priority: 1,
+        children: [
+          {
+            type: WorkItemType.FEATURE, title: 'New home dashboard', state: WorkItemState.ACTIVE, who: dev,
+            children: [
+              {
+                type: WorkItemType.USER_STORY, title: 'As an employee I see my day at a glance', state: WorkItemState.ACTIVE,
+                points: 8, who: dev,
+                children: [
+                  { type: WorkItemType.TASK, title: 'Attendance card redesign', state: WorkItemState.CLOSED, estimate: 10, who: dev, closedOffset: -2 },
+                  { type: WorkItemType.TASK, title: 'Goals section on home', state: WorkItemState.ACTIVE, estimate: 12, who: dev },
+                  { type: WorkItemType.BUG, title: 'Pull-to-refresh flickers on Android 14', state: WorkItemState.NEW, estimate: 3, who: hr, priority: 3 },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const projects: {
+      name: string; key: string; description: string; color: string; status: ProjectStatus;
+      teams: { name: string; manager?: Employee; description: string; members: { emp?: Employee; role: string }[]; backlog: Node[] }[];
+    }[] = [
+      {
+        name: 'Atlas Payments Platform', key: 'ATLAS', color: '#4F46E5', status: ProjectStatus.ACTIVE,
+        description: 'Next-generation payments platform — checkout, refunds and reconciliation.',
+        teams: [
+          {
+            name: 'Payments Core', manager: mgr, description: 'Owns the payments API and the checkout flow.',
+            members: [
+              { emp: mgr, role: 'Tech Lead' },
+              { emp: dev, role: 'Backend Engineer' },
+              { emp: admin, role: 'DevOps Engineer' },
+            ],
+            backlog: atlasBacklog,
+          },
+          {
+            name: 'Mobile Experience', manager: hr, description: 'Ships the employee and customer mobile apps.',
+            members: [
+              { emp: hr, role: 'Product Owner' },
+              { emp: dev, role: 'Mobile Engineer' },
+            ],
+            backlog: mobileBacklog,
+          },
+        ],
+      },
+      {
+        name: 'Insight Analytics', key: 'INSIG', color: '#0EA5E9', status: ProjectStatus.ACTIVE,
+        description: 'Self-serve dashboards and exports for people analytics.',
+        teams: [
+          {
+            name: 'Data Platform', manager: mgr, description: 'Warehouse, pipelines and the reporting API.',
+            members: [
+              { emp: mgr, role: 'Engineering Manager' },
+              { emp: admin, role: 'Data Engineer' },
+            ],
+            backlog: [
+              {
+                type: WorkItemType.EPIC, title: 'Attrition insights', state: WorkItemState.ACTIVE, priority: 2,
+                children: [
+                  {
+                    type: WorkItemType.FEATURE, title: 'Attrition trend report', state: WorkItemState.ACTIVE, who: admin,
+                    children: [
+                      {
+                        type: WorkItemType.USER_STORY, title: 'As HR I see attrition by department', state: WorkItemState.ACTIVE,
+                        points: 5, who: admin,
+                        children: [
+                          { type: WorkItemType.TASK, title: 'Headcount snapshot job', state: WorkItemState.CLOSED, estimate: 8, who: admin, closedOffset: -4 },
+                          { type: WorkItemType.TASK, title: 'Trend endpoint + caching', state: WorkItemState.ACTIVE, estimate: 6, who: mgr },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    for (const p of projects) {
+      const project = await projectRepo.save(projectRepo.create({
+        name: p.name, key: p.key, description: p.description, color: p.color, status: p.status,
+        startDate: day(-45), targetDate: day(75),
+        ownerId: managerUser?.id, ownerName: nameOf(mgr),
+      }));
+
+      // Three iterations: one finished, one running now, one queued up.
+      const [prevSprint, curSprint, nextSprint] = await sprintRepo.save([
+        sprintRepo.create({ projectId: project.id, name: `${p.key} Sprint 1`, goal: 'Foundations and plumbing', startDate: day(-28), endDate: day(-15), status: SprintStatus.COMPLETED }),
+        sprintRepo.create({ projectId: project.id, name: `${p.key} Sprint 2`, goal: 'Ship the core flow end to end', startDate: day(-7), endDate: day(6), status: SprintStatus.CURRENT }),
+        sprintRepo.create({ projectId: project.id, name: `${p.key} Sprint 3`, goal: 'Hardening and rollout', startDate: day(7), endDate: day(20), status: SprintStatus.FUTURE }),
+      ]);
+
+      let seq = 0;
+      for (const t of p.teams) {
+        const team = await projectTeamRepo.save(projectTeamRepo.create({
+          projectId: project.id, name: t.name, description: t.description,
+          managerEmployeeId: t.manager?.id, managerName: nameOf(t.manager),
+        }));
+        for (const m of t.members) {
+          if (!m.emp) continue;
+          await projectMemberRepo.save(projectMemberRepo.create({
+            teamId: team.id, projectId: project.id, employeeId: m.emp.id, name: nameOf(m.emp), role: m.role, capacityHoursPerDay: 8,
+          }));
+        }
+
+        // Walk the tree depth-first so parents always exist before their children.
+        const createNode = async (node: Node, parentId?: string): Promise<void> => {
+          const closed = node.state === WorkItemState.CLOSED;
+          const started = closed || node.state === WorkItemState.ACTIVE || node.state === WorkItemState.RESOLVED;
+          const closedAt = closed ? day(node.closedOffset ?? -1) : undefined;
+          const estimate = node.estimate ?? 0;
+          const item = await workItemRepo.save(workItemRepo.create({
+            projectId: project.id,
+            teamId: team.id,
+            // Closed history lives in the finished sprint; everything else is in flight.
+            sprintId: closed && (node.closedOffset ?? 0) <= -15 ? prevSprint.id : curSprint.id,
+            parentId,
+            seq: ++seq,
+            type: node.type,
+            title: node.title,
+            description: node.description,
+            state: node.state,
+            priority: node.priority ?? 2,
+            assigneeId: node.who?.id,
+            assigneeName: node.who ? nameOf(node.who) : undefined,
+            storyPoints: node.points ?? 0,
+            originalEstimate: estimate,
+            remainingWork: closed ? 0 : estimate,
+            completedWork: closed ? estimate : node.state === WorkItemState.ACTIVE ? Math.round(estimate * 0.4) : 0,
+            startDate: started ? day(-7) : undefined,
+            targetDate: day(6),
+            createdById: managerUser?.id,
+            createdByName: nameOf(mgr),
+            // Back-dated so the burndown has real history to draw from.
+            activatedAt: started ? day(-6) : undefined,
+            resolvedAt: closed || node.state === WorkItemState.RESOLVED ? closedAt ?? day(-2) : undefined,
+            closedAt,
+          }));
+
+          // Time entries — these are what the individual reports total up.
+          if (node.who && (closed || node.state === WorkItemState.ACTIVE) && estimate > 0) {
+            const spread = closed ? [-6, -5, -4] : [-3, -2, -1];
+            const per = Math.max(1, Math.round((closed ? estimate : estimate * 0.4) / spread.length));
+            for (const offset of spread) {
+              await workLogRepo.save(workLogRepo.create({
+                workItemId: item.id, projectId: project.id,
+                employeeId: node.who.id, employeeName: nameOf(node.who),
+                hours: per, date: day(offset),
+                note: closed ? 'Implementation + tests' : 'In progress',
+              }));
+            }
+          }
+
+          for (const child of node.children ?? []) await createNode(child, item.id);
+        };
+
+        for (const root of t.backlog) await createNode(root);
+      }
+
+      console.log(`✅ project ${p.key} — ${p.teams.length} team(s), 3 sprints, ${seq} work items (next: ${nextSprint.name})`);
+    }
+  } else {
+    console.log('ℹ️  projects already seeded');
   }
 
   await ds.destroy();
