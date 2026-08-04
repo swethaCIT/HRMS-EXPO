@@ -59,6 +59,13 @@ import CreateProjectScreen    from '../screens/projects/CreateProjectScreen';
 import CreateTeamScreen       from '../screens/projects/CreateTeamScreen';
 import MyWorkItemsScreen      from '../screens/projects/MyWorkItemsScreen';
 
+/* Team Calendar — org-wide meeting scheduling */
+import TeamCalendarScreen      from '../screens/calendar/TeamCalendarScreen';
+import AgendaScreen            from '../screens/calendar/AgendaScreen';
+import MeetingDetailScreen     from '../screens/calendar/MeetingDetailScreen';
+import MeetingFormScreen       from '../screens/calendar/MeetingFormScreen';
+import ParticipantPickerScreen from '../screens/calendar/ParticipantPickerScreen';
+
 const RootStack = createNativeStackNavigator();
 const Tab       = createBottomTabNavigator();
 const Inner     = createNativeStackNavigator();
@@ -124,6 +131,13 @@ const LEAF_SCREENS: [string, React.ComponentType<any>][] = [
   ['CreateProject', CreateProjectScreen],
   ['CreateTeam', CreateTeamScreen],
   ['MyWorkItems', MyWorkItemsScreen],
+  /* Team Calendar */
+  ['TeamCalendar', TeamCalendarScreen],
+  ['CalendarAgenda', AgendaScreen],
+  ['MeetingDetail', MeetingDetailScreen],
+  ['CreateMeeting', MeetingFormScreen],
+  ['EditMeeting', MeetingFormScreen],
+  ['ParticipantPicker', ParticipantPickerScreen],
 ];
 
 /**

@@ -3,6 +3,7 @@ import authReducer from './slices/authSlice';
 import approvalsReducer from './slices/approvalsSlice';
 import hrRequestsReducer from './slices/hrRequestsSlice';
 import notificationsReducer from './slices/notificationsSlice';
+import calendarReducer from './slices/calendarSlice';
 
 export const store = configureStore({
   reducer: {
@@ -10,6 +11,7 @@ export const store = configureStore({
     approvals: approvalsReducer,
     hrRequests: hrRequestsReducer,
     notifications: notificationsReducer,
+    calendar: calendarReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({ serializableCheck: false }),

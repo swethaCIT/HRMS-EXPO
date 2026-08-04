@@ -182,6 +182,21 @@ export const workItemApi = {
   logWork: (id: string, data: any) => api.post(`/work-items/${id}/logs`, data),
 };
 
+/* ── Team Calendar ── */
+
+export const calendarApi = {
+  listRange: (start: string, end: string) => api.get('/calendar/events', { params: { start, end } }),
+  upcoming: () => api.get('/calendar/upcoming'),
+  searchEmployees: (params: { q?: string; page?: number; limit?: number; start?: string; end?: string }) =>
+    api.get('/calendar/employees/search', { params }),
+  getOne: (id: string) => api.get(`/calendar/events/${id}`),
+  create: (data: any) => api.post('/calendar/events', data),
+  // Note: the backend uses PUT (not PATCH) for both edit and RSVP.
+  update: (id: string, data: any) => api.put(`/calendar/events/${id}`, data),
+  cancel: (id: string) => api.delete(`/calendar/events/${id}`),
+  rsvp: (id: string, status: 'Accepted' | 'Declined' | 'Tentative') => api.put(`/calendar/events/${id}/rsvp`, { status }),
+};
+
 // Admin user management
 export const userApi = {
   getAll: () => api.get('/users'),

@@ -8,7 +8,9 @@ import Svg, { Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 export type IconName =
   | 'home' | 'tag' | 'calendar' | 'user' | 'users' | 'check-square' | 'bar-chart'
   | 'pie-chart' | 'inbox' | 'briefcase' | 'bell' | 'clock' | 'log-out' | 'box'
-  | 'credit-card' | 'shield' | 'help-circle' | 'chevron-right' | 'settings' | 'file-text';
+  | 'credit-card' | 'shield' | 'help-circle' | 'chevron-right' | 'settings' | 'file-text'
+  | 'hourglass' | 'check'
+  | 'video' | 'map-pin' | 'link' | 'search' | 'x' | 'plus' | 'chevron-left';
 
 interface Props {
   name: IconName;
@@ -137,6 +139,47 @@ function render(name: IconName, p: any) {
       </>);
     case 'chevron-right':
       return (<Polyline {...p} points="9 18 15 12 9 6" />);
+    case 'check':
+      return (<Polyline {...p} points="20 6 9 17 4 12" />);
+    case 'hourglass':
+      return (<>
+        <Path {...p} d="M5 3h14" />
+        <Path {...p} d="M5 21h14" />
+        <Path {...p} d="M6 3c0 5.5 5 6.5 5 9s-5 3.5-5 9" />
+        <Path {...p} d="M18 3c0 5.5-5 6.5-5 9s5 3.5 5 9" />
+      </>);
+    case 'video':
+      return (<>
+        <Polyline {...p} points="23 7 16 12 23 17 23 7" />
+        <Rect {...p} x="1" y="5" width="15" height="14" rx="2" />
+      </>);
+    case 'map-pin':
+      return (<>
+        <Path {...p} d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+        <Circle {...p} cx="12" cy="10" r="3" />
+      </>);
+    case 'link':
+      return (<>
+        <Path {...p} d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+        <Path {...p} d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+      </>);
+    case 'search':
+      return (<>
+        <Circle {...p} cx="11" cy="11" r="8" />
+        <Line {...p} x1="21" y1="21" x2="16.65" y2="16.65" />
+      </>);
+    case 'x':
+      return (<>
+        <Line {...p} x1="18" y1="6" x2="6" y2="18" />
+        <Line {...p} x1="6" y1="6" x2="18" y2="18" />
+      </>);
+    case 'plus':
+      return (<>
+        <Line {...p} x1="12" y1="5" x2="12" y2="19" />
+        <Line {...p} x1="5" y1="12" x2="19" y2="12" />
+      </>);
+    case 'chevron-left':
+      return (<Polyline {...p} points="15 18 9 12 15 6" />);
     default:
       return null;
   }

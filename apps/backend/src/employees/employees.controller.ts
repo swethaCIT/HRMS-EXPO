@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
@@ -19,7 +29,10 @@ export class EmployeesController {
 
   @Get()
   findAll(@Query('limit') limit?: string, @Query('offset') offset?: string) {
-    return this.employeesService.findAll(limit ? +limit : undefined, offset ? +offset : undefined);
+    return this.employeesService.findAll(
+      limit ? +limit : undefined,
+      offset ? +offset : undefined,
+    );
   }
 
   @Get(':id')
