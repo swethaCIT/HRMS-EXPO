@@ -267,6 +267,7 @@ export default function ManagerDashboardScreen({ navigation }: any) {
               { e: '💰', l: 'Payslip',      go: 'Payroll' },
               { e: '🕒', l: 'Timesheet',    go: 'Timesheet' },
               { e: '📝', l: 'Request',      go: 'CreateRequest' },
+              { e: '🗓️', l: 'Team Calendar', go: 'TeamCalendar' },
             ].map((q) => (
               <TouchableOpacity key={q.l} style={st.quickChip} activeOpacity={0.85} onPress={() => navigation?.navigate(q.go)}>
                 <Text style={st.quickEmoji}>{q.e}</Text>

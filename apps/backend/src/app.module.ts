@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -23,6 +24,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { DocumentsModule } from './documents/documents.module';
 import { RegularizationsModule } from './regularizations/regularizations.module';
 import { ProjectsModule } from './projects/projects.module';
+import { TeamCalendarModule } from './team-calendar/team-calendar.module';
 import { HealthController } from './health/health.controller';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
 import { getDatabaseConfig } from './config/database.config';
@@ -34,6 +36,8 @@ import { getDatabaseConfig } from './config/database.config';
     // — ~5 req/s sustained, generous for a mobile client while still shedding
     // abusive/runaway traffic with 429 instead of letting it overwhelm the DB.
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 300 }]),
+    // Powers @Cron methods (calendar reminders, notification retry).
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -61,6 +65,7 @@ import { getDatabaseConfig } from './config/database.config';
     DocumentsModule,
     RegularizationsModule,
     ProjectsModule,
+    TeamCalendarModule,
   ],
   controllers: [HealthController],
   providers: [

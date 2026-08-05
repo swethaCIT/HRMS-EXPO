@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Patch, Param, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -17,7 +25,10 @@ export class NotificationsController {
 
   /** Register/refresh the signed-in user's own FCM device token — self-service, no role check needed. */
   @Patch('fcm-token')
-  async updateFcmToken(@CurrentUser('id') userId: string, @Body('token') token: string) {
+  async updateFcmToken(
+    @CurrentUser('id') userId: string,
+    @Body('token') token: string,
+  ) {
     await this.usersService.updateFcmToken(userId, token);
     return { success: true };
   }
@@ -30,7 +41,9 @@ export class NotificationsController {
 
   @Get('unread-count')
   unreadCount(@CurrentUser('id') userId: string) {
-    return this.notificationsService.unreadCount(userId).then((count) => ({ count }));
+    return this.notificationsService
+      .unreadCount(userId)
+      .then((count) => ({ count }));
   }
 
   @Patch('read-all')

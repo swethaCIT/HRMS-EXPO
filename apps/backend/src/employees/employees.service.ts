@@ -1,12 +1,12 @@
 import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { Employee } from './entities/employee.entity';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
-import { clampPaging } from '../common/utils/pagination';
+import { clampPaging, MAX_LIMIT } from '../common/utils/pagination';
 
 @Injectable()
 export class EmployeesService {
@@ -19,7 +19,7 @@ export class EmployeesService {
   async create(dto: CreateEmployeeDto): Promise<Employee> {
     const employee = this.employeeRepo.create({
       ...dto,
-      user: { id: dto.userId } as any,
+      user: { id: dto.userId },
     });
     return this.employeeRepo.save(employee);
   }
@@ -43,18 +43,66 @@ export class EmployeesService {
   }
 
   async findOne(id: string): Promise<Employee> {
-    const employee = await this.employeeRepo.findOne({ where: { id }, relations: { user: true } });
+    const employee = await this.employeeRepo.findOne({
+      where: { id },
+      relations: { user: true },
+    });
     if (!employee) throw new NotFoundException('Employee not found');
     return employee;
   }
 
   async findByUserId(userId: string): Promise<Employee | null> {
-    return this.employeeRepo.findOne({ where: { user: { id: userId } }, relations: { user: true } });
+    return this.employeeRepo.findOne({
+      where: { user: { id: userId } },
+      relations: { user: true },
+    });
+  }
+
+  /** True only if every id in `ids` maps to an existing employee — used to validate meeting participant lists. */
+  async existsAll(ids: string[]): Promise<boolean> {
+    if (!ids.length) return true;
+    const count = await this.employeeRepo.count({ where: { id: In(ids) } });
+    return count === ids.length;
+  }
+
+  /**
+   * Typeahead search across name/employee code/department, paginated by
+   * page+limit (unlike `findAll`'s limit/offset) to match a picker UI that
+   * shows page numbers rather than infinite scroll.
+   */
+  async search(
+    q?: string,
+    page?: number,
+    limit?: number,
+  ): Promise<{ data: Employee[]; total: number; page: number; limit: number }> {
+    const take = Math.min(
+      Math.max(1, limit && limit > 0 ? limit : 20),
+      MAX_LIMIT,
+    );
+    const currentPage = Math.max(1, page && page > 0 ? page : 1);
+    const skip = (currentPage - 1) * take;
+
+    const qb = this.employeeRepo
+      .createQueryBuilder('e')
+      .leftJoinAndSelect('e.user', 'user');
+    const term = q?.trim();
+    if (term) {
+      qb.where(
+        'e.firstName ILIKE :q OR e.lastName ILIKE :q OR e.employeeId ILIKE :q OR e.department ILIKE :q',
+        {
+          q: `%${term}%`,
+        },
+      );
+    }
+    qb.orderBy('e.firstName', 'ASC').skip(skip).take(take);
+
+    const [data, total] = await qb.getManyAndCount();
+    return { data, total, page: currentPage, limit: take };
   }
 
   async update(id: string, dto: UpdateEmployeeDto): Promise<Employee> {
     await this.findOne(id);
-    await this.employeeRepo.update(id, dto as any);
+    await this.employeeRepo.update(id, dto);
     return this.findOne(id);
   }
 

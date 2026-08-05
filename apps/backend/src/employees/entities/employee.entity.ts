@@ -1,4 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  OneToOne,
+  JoinColumn,
+} from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
 export enum EmploymentType {
@@ -51,20 +59,28 @@ export class Employee {
   @Column({ type: 'date', nullable: true })
   dateOfBirth: Date;
 
-  @Column({ type: 'enum', enum: EmploymentType, default: EmploymentType.FULL_TIME })
+  @Column({
+    type: 'enum',
+    enum: EmploymentType,
+    default: EmploymentType.FULL_TIME,
+  })
   employmentType: EmploymentType;
 
-  @Column({ type: 'enum', enum: EmploymentStatus, default: EmploymentStatus.ACTIVE })
+  @Column({
+    type: 'enum',
+    enum: EmploymentStatus,
+    default: EmploymentStatus.ACTIVE,
+  })
   status: EmploymentStatus;
 
   @Column({ nullable: true })
   avatarUrl: string;
 
   /* ── Enterprise HR fields ── */
-  @Column({ nullable: true }) grade: string;              // band / level, e.g. "L3 · Senior"
-  @Column({ nullable: true }) workLocation: string;       // e.g. "Bengaluru, IN"
-  @Column({ nullable: true }) workMode: string;           // Office | Hybrid | Remote
-  @Column({ nullable: true }) reportingManager: string;   // manager display name
+  @Column({ nullable: true }) grade: string; // band / level, e.g. "L3 · Senior"
+  @Column({ nullable: true }) workLocation: string; // e.g. "Bengaluru, IN"
+  @Column({ nullable: true }) workMode: string; // Office | Hybrid | Remote
+  @Column({ nullable: true }) reportingManager: string; // manager display name
 
   @Column({ nullable: true }) gender: string;
   @Column({ nullable: true }) bloodGroup: string;
@@ -78,7 +94,7 @@ export class Employee {
 
   // Statutory / payroll (store masked / non-sensitive references)
   @Column({ nullable: true }) pan: string;
-  @Column({ nullable: true }) uan: string;                // PF universal account no.
+  @Column({ nullable: true }) uan: string; // PF universal account no.
   @Column({ nullable: true }) bankName: string;
   @Column({ nullable: true }) bankLast4: string;
 
