@@ -11,7 +11,7 @@
 import 'reflect-metadata';
 import * as dotenv from 'dotenv';
 import * as bcrypt from 'bcrypt';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 
 import { User, UserRole } from './users/entities/user.entity';
 import { Employee, EmploymentType, EmploymentStatus } from './employees/entities/employee.entity';
@@ -121,7 +121,7 @@ async function main() {
   /* ── Clear this script's previous run so re-running stays deterministic ── */
   const stale = await eventRepo.find({ where: SEEDED_TITLES.map((title) => ({ title })) });
   if (stale.length) {
-    await participantRepo.delete({ eventId: stale.map((e) => e.eventId) as any });
+    await participantRepo.delete({ eventId: In(stale.map((e) => e.eventId)) });
     await eventRepo.remove(stale);
     console.log(`🧹 removed ${stale.length} previously-seeded demo event(s)`);
   }
