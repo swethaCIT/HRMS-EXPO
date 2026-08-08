@@ -1,6 +1,6 @@
-import { IsEmail, IsEnum, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
 import { UserRole } from '../entities/user.entity';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateUserDto {
   @ApiProperty()
@@ -12,7 +12,18 @@ export class CreateUserDto {
   @MinLength(8)
   password: string;
 
-  @ApiProperty({ enum: UserRole, default: UserRole.EMPLOYEE })
+  /**
+   * NO field initializer here, deliberately.
+   *
+   * `UpdateUserDto extends PartialType(CreateUserDto)`, and a default value on
+   * the class survives that — so every instantiated update DTO carried
+   * `role: 'employee'` even when the caller never sent it. Deactivating a
+   * manager therefore silently demoted them to employee, invisibly, on an
+   * endpoint that looked like it only touched `isActive`. The service applies
+   * the default instead, where it only affects creation.
+   */
+  @ApiPropertyOptional({ enum: UserRole, default: UserRole.EMPLOYEE })
+  @IsOptional()
   @IsEnum(UserRole)
-  role: UserRole = UserRole.EMPLOYEE;
+  role?: UserRole;
 }

@@ -6,7 +6,9 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from './entities/user.entity';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { SkipAudit } from '../audit/skip-audit.decorator';
+import { User, UserRole } from './entities/user.entity';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -17,8 +19,9 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  create(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
+  @SkipAudit() // UsersService records these with the subject and field diffs
+  create(@Body() dto: CreateUserDto, @CurrentUser() me: User) {
+    return this.usersService.create(dto, actorOf(me));
   }
 
   @Get()
@@ -32,12 +35,19 @@ export class UsersController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.usersService.update(id, dto);
+  @SkipAudit() // UsersService records these with the subject and field diffs
+  update(@Param('id') id: string, @Body() dto: UpdateUserDto, @CurrentUser() me: User) {
+    return this.usersService.update(id, dto, actorOf(me));
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.usersService.remove(id);
+  @SkipAudit() // UsersService records these with the subject and field diffs
+  remove(@Param('id') id: string, @CurrentUser() me: User) {
+    return this.usersService.remove(id, actorOf(me));
   }
+}
+
+/** The signed-in user, in the shape the audit log wants. */
+function actorOf(u?: User) {
+  return { id: u?.id, name: u?.email?.split('@')[0], role: u?.role };
 }

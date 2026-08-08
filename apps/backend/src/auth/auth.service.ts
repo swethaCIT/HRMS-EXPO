@@ -8,6 +8,8 @@ import { MailService } from '../mail/mail.service';
 import { LoginDto } from './dto/login.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UserRole } from '../users/entities/user.entity';
+import { AuditService } from '../audit/audit.service';
+import { AuditAction } from '../audit/entities/audit-log.entity';
 
 @Injectable()
 export class AuthService {
@@ -16,6 +18,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly mail: MailService,
     private readonly config: ConfigService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -29,13 +32,51 @@ export class AuthService {
     return this.signToken(user.id, user.email);
   }
 
-  async login(dto: LoginDto) {
+  /**
+   * `ctx` carries request metadata for the audit trail. Failed attempts are
+   * recorded too — a burst of them against one account is the signal you
+   * actually want, and it never reaches any other logging path.
+   */
+  async login(dto: LoginDto, ctx?: { ip?: string; userAgent?: string }) {
+    const fail = (reason: string) => {
+      void this.audit.record({
+        action: AuditAction.LOGIN_FAILED,
+        entityType: 'auth',
+        entityLabel: dto.email,
+        actor: { name: dto.email },
+        summary: `Failed sign-in for ${dto.email} — ${reason}`,
+        ip: ctx?.ip,
+        userAgent: ctx?.userAgent,
+        success: false,
+      });
+    };
+
     const user = await this.usersService.findByEmail(dto.email);
-    if (!user) throw new UnauthorizedException('Invalid credentials');
-    if (!user.isActive) throw new UnauthorizedException('Account is disabled');
+    if (!user) {
+      fail('no such account');
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    if (!user.isActive) {
+      fail('account disabled');
+      throw new UnauthorizedException('Account is disabled');
+    }
 
     const valid = await bcrypt.compare(dto.password, user.password);
-    if (!valid) throw new UnauthorizedException('Invalid credentials');
+    if (!valid) {
+      fail('wrong password');
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    void this.audit.record({
+      action: AuditAction.LOGIN,
+      entityType: 'auth',
+      entityId: user.id,
+      entityLabel: user.email,
+      actor: { id: user.id, name: user.email.split('@')[0], role: user.role },
+      summary: `${user.email} signed in`,
+      ip: ctx?.ip,
+      userAgent: ctx?.userAgent,
+    });
 
     return this.signToken(user.id, user.email);
   }

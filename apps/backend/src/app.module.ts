@@ -26,6 +26,8 @@ import { RegularizationsModule } from './regularizations/regularizations.module'
 import { ProjectsModule } from './projects/projects.module';
 import { TeamCalendarModule } from './team-calendar/team-calendar.module';
 import { AccessControlModule } from './common/access/access-control.module';
+import { AuditModule } from './audit/audit.module';
+import { AuditInterceptor } from './audit/audit.interceptor';
 import { HealthController } from './health/health.controller';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
 import { getDatabaseConfig } from './config/database.config';
@@ -55,6 +57,7 @@ import { buildCacheOptions } from './config/redis.config';
       useFactory: buildCacheOptions,
     }),
     AccessControlModule,
+    AuditModule,
     AuthModule,
     UsersModule,
     EmployeesModule,
@@ -80,6 +83,8 @@ import { buildCacheOptions } from './config/redis.config';
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_INTERCEPTOR, useClass: TimeoutInterceptor },
+    // Safety net: records every mutating request, including refused ones.
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
 export class AppModule {}
