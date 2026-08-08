@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, Linking,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import { RootState, AppDispatch } from '../../store';
+import { RootState, AppDispatch, clearUserData } from '../../store';
 import { logout } from '../../store/slices/authSlice';
 import { T, initialsOf } from '../../data/managerData';
 import Icon, { IconName } from '../../components/Icon';
@@ -42,7 +42,13 @@ export default function ProfileScreen({ navigation }: any) {
   const confirmLogout = () =>
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: () => dispatch(logout()) },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        // Clear the other slices too — otherwise the next person to sign in on
+        // this device inherits the previous user's approvals/notifications.
+        onPress: () => { dispatch(logout()); clearUserData(); },
+      },
     ]);
 
   const ten = tenure(employee?.dateOfJoining);

@@ -32,6 +32,9 @@ interface NewPerson {
 }
 
 const NEW_PEOPLE: NewPerson[] = [
+  // EMP005 is created here rather than assumed: seed.ts defines only EMP001-EMP004,
+  // so looking it up used to abort the whole script (see the byCode calls below).
+  { email: 'meera.das@hrms.com', employeeId: 'EMP005', firstName: 'Meera', lastName: 'Das', department: 'Operations', designation: 'Operations Analyst' },
   { email: 'priya.sharma@hrms.com', employeeId: 'EMP006', firstName: 'Priya', lastName: 'Sharma', department: 'Marketing', designation: 'Marketing Lead' },
   { email: 'karthik.nair@hrms.com', employeeId: 'EMP007', firstName: 'Karthik', lastName: 'Nair', department: 'Sales', designation: 'Sales Executive' },
   { email: 'sneha.thomas@hrms.com', employeeId: 'EMP008', firstName: 'Sneha', lastName: 'Thomas', department: 'Finance', designation: 'Financial Analyst' },
@@ -110,8 +113,11 @@ async function main() {
   const admin = await byCode('EMP001'); // admin@hrms.com
   const hr = await byCode('EMP002'); // hr@hrms.com
   const manager = await byCode('EMP003'); // manager@hrms.com
-  const rahulOther = await byCode('EMP004'); // swethas.aiml2022@citchennai.net
-  const employeeUser = await byCode('EMP005'); // employee@hrms.com
+  // seed.ts maps EMP004 to employee@hrms.com (the demo employee login); EMP005 is
+  // seeded by this script. The previous mapping assumed a seed.ts that no longer
+  // exists, so `npm run seed:calendar` always aborted on a missing EMP005.
+  const employeeUser = await byCode('EMP004'); // employee@hrms.com — demo employee login
+  const rahulOther = await byCode('EMP005'); // Meera Das — a second, distinct attendee
   const priya = await byCode('EMP006');
   const karthik = await byCode('EMP007');
   const sneha = await byCode('EMP008');

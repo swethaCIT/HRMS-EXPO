@@ -420,6 +420,7 @@ export class TeamCalendarService {
     limit?: number,
     startStr?: string,
     endStr?: string,
+    excludeEventId?: string,
   ) {
     const result = await this.employeesService.search(q, page, limit);
 
@@ -432,10 +433,14 @@ export class TeamCalendarService {
       !isNaN(rangeStart.getTime()) &&
       !isNaN(rangeEnd.getTime())
     ) {
+      // When editing an existing meeting, exclude it from its own conflict
+      // check — otherwise every participant already on the meeting shows up
+      // "Busy" against the very slot they're already booked into.
       busyMap = await this.getBusyMap(
         result.data.map((e) => e.id),
         rangeStart,
         rangeEnd,
+        excludeEventId,
       );
     }
 
@@ -587,10 +592,14 @@ export class TeamCalendarService {
               rangeStart,
             })
             .orWhere(
-              'e.recurrenceType != :none AND (e.recurrenceEndDate IS NULL OR e.recurrenceEndDate >= :rangeStart)',
+              'e.recurrenceType != :none AND (e.recurrenceEndDate IS NULL OR e.recurrenceEndDate >= :rangeStartDay)',
               {
                 none: RecurrenceType.NONE,
-                rangeStart,
+                // `recurrenceEndDate` is a plain `date` column (implicitly
+                // midnight) — comparing it against a timestamp with a
+                // time-of-day component would drop the series the moment
+                // any time passes on its last valid day. Compare date-to-date.
+                rangeStartDay: startOfDay(rangeStart),
               },
             );
         }),
@@ -690,12 +699,14 @@ export class TeamCalendarService {
     employeeIds: string[],
     rangeStart: Date,
     rangeEnd: Date,
+    excludeEventId?: string,
   ): Promise<Map<string, boolean>> {
     const map = new Map(employeeIds.map((id) => [id, false]));
     const conflicts = await this.findConflicts(
       employeeIds,
       rangeStart,
       rangeEnd,
+      excludeEventId,
     );
     for (const c of conflicts)
       for (const id of c.employeeIds) map.set(id, true);

@@ -165,7 +165,7 @@ export const rsvpMeeting = createAsyncThunk(
 export const searchParticipants = createAsyncThunk(
   'calendar/searchParticipants',
   async (
-    params: { q?: string; start?: string; end?: string; page?: number; limit?: number },
+    params: { q?: string; start?: string; end?: string; page?: number; limit?: number; excludeEventId?: string },
     { rejectWithValue },
   ) => {
     try {
@@ -181,6 +181,8 @@ const calendarSlice = createSlice({
   name: 'calendar',
   initialState,
   reducers: {
+    /** Wipe on sign-out — meetings are per-user and must not leak across sessions. */
+    clearCalendar: () => initialState,
     setCurrentMonth: (state, action: PayloadAction<string>) => {
       state.currentMonth = action.payload;
     },
@@ -272,6 +274,7 @@ const calendarSlice = createSlice({
 });
 
 export const {
+  clearCalendar,
   setCurrentMonth,
   setSelectedDate,
   invalidateCache,

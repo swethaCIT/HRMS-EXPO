@@ -2,10 +2,12 @@ import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import { randomInt } from 'crypto';
 import { UsersService } from '../users/users.service';
 import { MailService } from '../mail/mail.service';
 import { LoginDto } from './dto/login.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
+import { UserRole } from '../users/entities/user.entity';
 
 @Injectable()
 export class AuthService {
@@ -16,8 +18,14 @@ export class AuthService {
     private readonly config: ConfigService,
   ) {}
 
+  /**
+   * Public self-registration. The role is FORCED to `employee` and never taken
+   * from the request body: this endpoint is unauthenticated, so honouring a
+   * caller-supplied role would let anyone mint themselves an admin account.
+   * Privileged accounts are created only via the admin-guarded `POST /users`.
+   */
   async register(dto: CreateUserDto) {
-    const user = await this.usersService.create(dto);
+    const user = await this.usersService.create({ ...dto, role: UserRole.EMPLOYEE });
     return this.signToken(user.id, user.email);
   }
 
@@ -33,14 +41,25 @@ export class AuthService {
   }
 
   /* ── Forgot / reset password ── */
+
+  /** Wrong-code attempts allowed before the reset token is burned. */
+  private static readonly MAX_OTP_ATTEMPTS = 5;
+
   private genOtp(): string {
-    // 6-digit numeric OTP (avoids Math.random determinism concerns — fine at runtime)
-    return String(Math.floor(100000 + Math.random() * 900000));
+    // crypto.randomInt, not Math.random: V8's PRNG is not cryptographic and its
+    // internal state can be recovered from observed outputs, so an attacker who
+    // can trigger and read their own OTPs could predict someone else's.
+    return String(randomInt(100000, 1000000));
   }
 
   async forgotPassword(email: string) {
     const user = await this.usersService.findByEmail(email);
-    const isDev = this.config.get('NODE_ENV') !== 'production';
+    // Returning the OTP in the HTTP response is an account-takeover primitive,
+    // so it requires an explicit opt-in rather than merely "NODE_ENV isn't
+    // production" — a plain `node dist/main` with no env set would otherwise
+    // expose it. Set EXPOSE_DEV_OTP=true locally when there's no mail provider.
+    const isDev =
+      this.config.get('NODE_ENV') !== 'production' && this.config.get('EXPOSE_DEV_OTP') === 'true';
     // Always return success (don't reveal whether the email exists).
     if (!user) return { sent: true };
 
@@ -65,10 +84,26 @@ export class AuthService {
     if (new Date(user.resetTokenExpires).getTime() < Date.now()) {
       throw new BadRequestException('Reset code has expired');
     }
+
     const valid = await bcrypt.compare(otp, user.resetTokenHash);
-    if (!valid) throw new BadRequestException('Invalid reset code');
+    if (!valid) {
+      // Without a counter the 6-digit code stayed guessable for the full 15
+      // minutes, and the global 300 req/min throttle is per-IP — trivially
+      // sidestepped. Burn the token after a handful of wrong guesses.
+      const attempts = (user.resetAttempts ?? 0) + 1;
+      if (attempts >= AuthService.MAX_OTP_ATTEMPTS) {
+        await this.usersService.clearResetToken(user.id);
+        throw new BadRequestException('Too many incorrect codes. Request a new reset code.');
+      }
+      await this.usersService.setResetAttempts(user.id, attempts);
+      throw new BadRequestException(
+        `Invalid reset code. ${AuthService.MAX_OTP_ATTEMPTS - attempts} attempt(s) remaining.`,
+      );
+    }
 
     await this.usersService.setPassword(user.id, newPassword);
+    // One-time use: clear the token so the same code can't be replayed.
+    await this.usersService.clearResetToken(user.id);
     return { success: true };
   }
 

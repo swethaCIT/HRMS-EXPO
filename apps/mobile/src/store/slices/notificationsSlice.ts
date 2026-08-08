@@ -5,9 +5,11 @@ export interface NotificationItem {
   id: string;
   title: string;
   body: string;
-  type: string;       // info | approval | leave | payroll | ticket | system
+  type: string;       // info | approval | leave | payroll | ticket | system | work_item | calendar_*
   read: boolean;
   createdAt: string;
+  /** Set on calendar_* notifications — the meeting this one refers to. */
+  eventId?: string | null;
 }
 
 const MOCK: NotificationItem[] = [
@@ -33,6 +35,8 @@ const slice = createSlice({
   name: 'notifications',
   initialState,
   reducers: {
+    /** Wipe on sign-out — notifications are per-user and must not leak across sessions. */
+    resetNotifications: () => initialState,
     markReadLocal: (state, action: PayloadAction<string>) => {
       const n = state.items.find((i) => i.id === action.payload);
       if (n) n.read = true;
@@ -55,5 +59,5 @@ const slice = createSlice({
   },
 });
 
-export const { markReadLocal, markAllReadLocal } = slice.actions;
+export const { markReadLocal, markAllReadLocal, resetNotifications } = slice.actions;
 export default slice.reducer;

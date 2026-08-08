@@ -12,7 +12,9 @@ import { ProjectTeam, ProjectTeamMember } from './entities/project-team.entity';
 import { Sprint, SprintStatus } from './entities/sprint.entity';
 import { WorkItem, WorkItemState, WorkItemType } from './entities/work-item.entity';
 import { WorkLog } from './entities/work-log.entity';
+import { ProjectActivity } from './entities/project-activity.entity';
 import { Employee } from '../employees/entities/employee.entity';
+import { ActivityService } from './activity.service';
 import { ProjectsService } from './projects.service';
 import { SprintsService } from './sprints.service';
 import { WorkItemsService } from './work-items.service';
@@ -53,7 +55,10 @@ function repo(rows: any[] = []) {
   };
 }
 
-const item = (over: Partial<WorkItem> = {}): any => ({
+// `Record<string, any>` rather than `Partial<WorkItem>`: callers pass ISO date
+// strings (matching the DTOs) and an explicit `parentId: null`, neither of
+// which match the entity's own column types.
+const item = (over: Record<string, any> = {}): any => ({
   id: 'wi',
   seq: 1,
   projectId: 'p1',
@@ -83,10 +88,12 @@ async function build(rows: {
     items: repo(rows.items ?? []),
     logs: repo(rows.logs ?? []),
     employees: repo(rows.employees ?? []),
+    activity: repo([]),
   };
   const moduleRef = await Test.createTestingModule({
     providers: [
-      ProjectsService, SprintsService, WorkItemsService, ReportsService,
+      ActivityService, ProjectsService, SprintsService, WorkItemsService, ReportsService,
+      { provide: getRepositoryToken(ProjectActivity), useValue: repos.activity },
       { provide: getRepositoryToken(Project), useValue: repos.projects },
       { provide: getRepositoryToken(ProjectTeam), useValue: repos.teams },
       { provide: getRepositoryToken(ProjectTeamMember), useValue: repos.members },
@@ -298,6 +305,149 @@ describe('ReportsService', () => {
     });
     expect(rahul.daysEngaged).toBe(2);
     expect(rahul.avgHoursPerDay).toBe(4);
+  });
+});
+
+describe('Audit trail', () => {
+  it('records who created an item and who changed it, with old → new values', async () => {
+    const { items, repos } = await build({
+      projects: [{ id: 'p1', key: 'ATLAS', name: 'Atlas' }],
+      items: [],
+    });
+
+    const created: any = await items.create(
+      { projectId: 'p1', type: WorkItemType.TASK, title: 'Ship it' } as any,
+      { id: 'u-mgr', name: 'Arjun Menon' },
+    );
+    const createEntry = repos.activity.rows.find((r: any) => r.action === 'created');
+    expect(createEntry).toMatchObject({ actorId: 'u-mgr', actorName: 'Arjun Menon', entityTitle: 'Ship it' });
+
+    await items.update(created.id, { title: 'Ship it faster', priority: 1 } as any, { id: 'u-emp', name: 'Rahul Verma' });
+
+    const updateEntry = repos.activity.rows.find((r: any) => r.action === 'updated');
+    expect(updateEntry.actorName).toBe('Rahul Verma');
+    expect(updateEntry.changes).toEqual(
+      expect.arrayContaining([{ field: 'Title', from: 'Ship it', to: 'Ship it faster' }]),
+    );
+    // The item itself carries the last editor, for the "updated by" line.
+    const after: any = repos.items.rows.find((i: any) => i.id === created.id);
+    expect(after).toMatchObject({ createdByName: 'Arjun Menon', updatedByName: 'Rahul Verma' });
+  });
+
+  it('logs a state change as its own history entry', async () => {
+    const { items, repos } = await build({
+      projects: [{ id: 'p1', key: 'ATLAS', name: 'Atlas' }],
+      items: [item({ id: 'wi', state: WorkItemState.NEW })],
+    });
+
+    await items.setState('wi', { state: WorkItemState.ACTIVE } as any, { id: 'u1', name: 'Priya' });
+
+    const entry = repos.activity.rows.find((r: any) => r.action === 'state_changed');
+    expect(entry.changes).toEqual([{ field: 'State', from: 'new', to: 'active' }]);
+    expect(entry.summary).toContain('Priya');
+  });
+
+  it('keeps a record of a deletion even though the item row is gone', async () => {
+    const { items, repos } = await build({
+      projects: [{ id: 'p1', key: 'ATLAS', name: 'Atlas' }],
+      items: [item({ id: 'wi', title: 'Obsolete task' })],
+    });
+
+    await items.remove('wi', { id: 'u1', name: 'Meera' });
+
+    const entry = repos.activity.rows.find((r: any) => r.action === 'deleted');
+    expect(entry).toMatchObject({ entityId: 'wi', entityTitle: 'Obsolete task', actorName: 'Meera' });
+  });
+});
+
+describe('Team access control', () => {
+  it("adds the team's manager to the roster with manage access", async () => {
+    const { projects, repos } = await build({ projects: [{ id: 'p1', key: 'ATLAS', name: 'Atlas' }] });
+
+    const team: any = await projects.createTeam(
+      'p1',
+      { name: 'Core Platform', managerEmployeeId: 'e-mgr', managerName: 'Arjun' } as any,
+      { id: 'u1', name: 'Arjun' },
+    );
+
+    const roster = repos.members.rows.filter((m: any) => m.teamId === team.id);
+    expect(roster).toHaveLength(1);
+    expect(roster[0]).toMatchObject({ employeeId: 'e-mgr', accessLevel: 'manage' });
+  });
+
+  it('defaults new members to contribute and records an access change', async () => {
+    const { projects, repos } = await build({
+      projects: [{ id: 'p1', key: 'ATLAS', name: 'Atlas' }],
+      teams: [{ id: 't1', projectId: 'p1', name: 'Core' }],
+    });
+
+    const member: any = await projects.addMember('t1', { employeeId: 'e1', name: 'Rahul' } as any, { id: 'u1', name: 'Arjun' });
+    expect(member.accessLevel).toBe('contribute');
+
+    await projects.updateMember(member.id, { accessLevel: 'read' } as any, { id: 'u1', name: 'Arjun' });
+    const entry = repos.activity.rows.find((r: any) => r.action === 'access_changed');
+    expect(entry.changes).toEqual(
+      expect.arrayContaining([{ field: 'Access level', from: 'contribute', to: 'read' }]),
+    );
+  });
+
+  it('rejects adding the same person twice but keeps the rest of a batch', async () => {
+    const { projects } = await build({
+      projects: [{ id: 'p1', key: 'ATLAS', name: 'Atlas' }],
+      teams: [{ id: 't1', projectId: 'p1', name: 'Core' }],
+    });
+
+    await projects.addMember('t1', { employeeId: 'e1', name: 'Rahul' } as any);
+    const result = await projects.addMembers(
+      't1',
+      [{ employeeId: 'e1', name: 'Rahul' }, { employeeId: 'e2', name: 'Priya' }] as any,
+      { id: 'u1', name: 'Arjun' },
+    );
+
+    expect(result.added).toHaveLength(1);
+    expect(result.added[0].employeeId).toBe('e2');
+    expect(result.skipped[0]).toMatchObject({ name: 'Rahul' });
+  });
+
+  it('grants manage to managers/HR/admin and read to a non-member employee', async () => {
+    const { projects } = await build({
+      projects: [{ id: 'p1', key: 'ATLAS', name: 'Atlas' }],
+      teams: [{ id: 't1', projectId: 'p1', name: 'Core' }],
+      employees: [{ id: 'e-out', user: { id: 'u-out' } }],
+    });
+
+    expect(await projects.accessFor('t1', { id: 'u-mgr', role: 'manager' })).toBe('manage');
+    expect(await projects.accessFor('t1', { id: 'u-out', role: 'employee' })).toBe('read');
+  });
+});
+
+describe('Combined team sprint graph', () => {
+  it('returns one series per team plus the combined curve, sharing day labels', async () => {
+    const { sprints } = await build({
+      projects: [{ id: 'p1', key: 'ATLAS', name: 'Atlas' }],
+      teams: [
+        { id: 't1', projectId: 'p1', name: 'Core', createdAt: day(-30) },
+        { id: 't2', projectId: 'p1', name: 'Mobile', createdAt: day(-29) },
+        { id: 't3', projectId: 'p1', name: 'Idle', createdAt: day(-28) },
+      ],
+      sprints: [SPRINT],
+      items: [
+        item({ id: 'a', teamId: 't1', originalEstimate: 10, state: WorkItemState.CLOSED, closedAt: day(-3), remainingWork: 0 }),
+        item({ id: 'b', teamId: 't1', originalEstimate: 6, remainingWork: 6 }),
+        item({ id: 'c', teamId: 't2', originalEstimate: 4, remainingWork: 4 }),
+      ],
+    });
+
+    const g = await sprints.burndownByTeam('s1');
+
+    expect(g.combined.total).toBe(20);
+    expect(g.teams.map((t: any) => t.name).sort()).toEqual(['Core', 'Mobile']);
+    // Every series is plotted against the same x-axis.
+    for (const t of g.teams) expect(t.actual).toHaveLength(g.labels.length);
+    expect(g.teams.find((t: any) => t.name === 'Core')!.total).toBe(16);
+    expect(g.teams.find((t: any) => t.name === 'Mobile')!.total).toBe(4);
+    // A team with nothing in the sprint is reported, not drawn as a flat line.
+    expect(g.teamsWithoutWork).toEqual([{ teamId: 't3', name: 'Idle' }]);
   });
 });
 

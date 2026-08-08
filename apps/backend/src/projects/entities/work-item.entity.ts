@@ -102,6 +102,13 @@ export class WorkItem {
   @Column({ nullable: true })
   createdByName: string;
 
+  /** Who touched it last — shown next to "Created by" on the item detail. */
+  @Column({ nullable: true })
+  updatedById: string;
+
+  @Column({ nullable: true })
+  updatedByName: string;
+
   @Column({ type: 'date', nullable: true })
   startDate: Date;
 

@@ -43,6 +43,11 @@ export function expandOccurrences(
     : new Date(event.startDateTime.getTime() + ONE_YEAR_MS);
   const iterCap = seriesEnd < rangeEnd ? seriesEnd : rangeEnd;
 
+  // Anchor day-of-month for MONTHLY series, e.g. 31. Kept fixed across the
+  // whole series (rather than re-read from the previous occurrence) so a
+  // short month doesn't permanently drag every later occurrence down with it.
+  const anchorDay = event.startDateTime.getDate();
+
   const occurrences: Occurrence[] = [];
   let occStart = new Date(event.startDateTime);
   let guard = 0;
@@ -52,12 +57,12 @@ export function expandOccurrences(
     if (occStart < rangeEnd && occEnd > rangeStart) {
       occurrences.push({ start: occStart, end: occEnd });
     }
-    occStart = advance(occStart, event.recurrenceType);
+    occStart = advance(occStart, event.recurrenceType, anchorDay);
   }
   return occurrences;
 }
 
-function advance(date: Date, type: RecurrenceType): Date {
+function advance(date: Date, type: RecurrenceType, anchorDay: number): Date {
   const d = new Date(date);
   switch (type) {
     case RecurrenceType.DAILY:
@@ -66,9 +71,16 @@ function advance(date: Date, type: RecurrenceType): Date {
     case RecurrenceType.WEEKLY:
       d.setDate(d.getDate() + 7);
       break;
-    case RecurrenceType.MONTHLY:
+    case RecurrenceType.MONTHLY: {
+      // Jump via day 1 so setMonth can't overflow into a later month when
+      // the anchor day doesn't exist in the target month (e.g. day 31 into
+      // February) — clamp to that month's last day instead.
+      d.setDate(1);
       d.setMonth(d.getMonth() + 1);
+      const daysInTargetMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      d.setDate(Math.min(anchorDay, daysInTargetMonth));
       break;
+    }
   }
   return d;
 }

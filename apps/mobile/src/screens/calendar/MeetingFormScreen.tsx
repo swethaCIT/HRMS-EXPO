@@ -112,10 +112,17 @@ export default function MeetingFormScreen({ route, navigation }: any) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(initialDate);
-  const [startHour, setStartHour] = useState(initialDate.getHours() < 23 ? initialDate.getHours() + 1 : 23);
+  // Default start = now + 1h, end = now + 2h, both capped at 23:00 so the
+  // form never proposes a time past midnight. That cap makes start and end
+  // collide at 23:00 whenever the real hour is 22 or 23 — bump the default
+  // end minute so start (23:00) still sorts before end (23:30) instead of
+  // failing validation before the user has touched anything.
+  const defaultStartHour = initialDate.getHours() < 23 ? initialDate.getHours() + 1 : 23;
+  const defaultEndHour = initialDate.getHours() < 22 ? initialDate.getHours() + 2 : 23;
+  const [startHour, setStartHour] = useState(defaultStartHour);
   const [startMinute, setStartMinute] = useState(0);
-  const [endHour, setEndHour] = useState(initialDate.getHours() < 22 ? initialDate.getHours() + 2 : 23);
-  const [endMinute, setEndMinute] = useState(0);
+  const [endHour, setEndHour] = useState(defaultEndHour);
+  const [endMinute, setEndMinute] = useState(defaultStartHour === defaultEndHour ? 30 : 0);
   const [meetingMode, setMeetingMode] = useState<MeetingMode>('Online');
   const [location, setLocation] = useState('');
   const [meetingLink, setMeetingLink] = useState('');
@@ -309,7 +316,7 @@ export default function MeetingFormScreen({ route, navigation }: any) {
         <TouchableOpacity
           style={s.addParticipantsBtn}
           activeOpacity={0.85}
-          onPress={() => navigation?.navigate('ParticipantPicker', { startDateTime: startDateTime.toISOString(), endDateTime: endDateTime.toISOString() })}
+          onPress={() => navigation?.navigate('ParticipantPicker', { startDateTime: startDateTime.toISOString(), endDateTime: endDateTime.toISOString(), excludeEventId: isEdit ? eventId : undefined })}
         >
           <Icon name="plus" size={14} color={T.primary} strokeWidth={2.6} />
           <Text style={s.addParticipantsTx}>Add participants</Text>

@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, DeleteDateColumn, OneToOne } from 'typeorm';
 import { Exclude } from 'class-transformer';
 
 export enum UserRole {
@@ -38,9 +38,23 @@ export class User {
   @Exclude()
   resetTokenExpires: Date;
 
+  /** Wrong OTP guesses against the current reset token; burns it at the cap. */
+  @Column({ type: 'int', default: 0 })
+  @Exclude()
+  resetAttempts: number;
+
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  // Required by `UsersService.remove`, which soft-deletes. Without this column
+  // TypeORM's softDelete throws MissingDeleteDateColumnError, so every attempt
+  // to remove a user 500s and the account stays active. Its presence also makes
+  // every ordinary find() exclude removed users automatically — including the
+  // login lookup — which is the intended behaviour.
+  @DeleteDateColumn()
+  @Exclude()
+  deletedAt: Date | null;
 }

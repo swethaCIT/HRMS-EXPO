@@ -11,8 +11,10 @@ import { getErrorMessage } from '../../utils/errorMessage';
 import Icon from '../../components/Icon';
 import { Avatar, BoardHeader, FieldRow, OfflineNote, PriorityChip, StateChip, TypeBadge } from './components';
 import { ProgressBar } from './charts';
+import ActivityFeed from './ActivityFeed';
 import {
-  ALL_STATES, fmtDate, fmtHours, isOverdue, nextStates, PRIORITY_META, refOf, STATE_META, T, TYPE_META, WorkItemState,
+  ActivityEntry, ALL_STATES, fmtDate, fmtHours, isOverdue, nextStates, PRIORITY_META,
+  refOf, STATE_META, T, timeAgo, TYPE_META, WorkItemState,
 } from './boardTheme';
 
 /** The four workflow states shown as a stepper (Removed is set from the menu). */
@@ -34,6 +36,9 @@ export default function WorkItemDetailScreen({ route, navigation }: any) {
   const [offline, setOffline] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const [history, setHistory] = useState<ActivityEntry[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   const [logOpen, setLogOpen] = useState(false);
   const [hours, setHours] = useState('');
   const [note, setNote] = useState('');
@@ -41,8 +46,13 @@ export default function WorkItemDetailScreen({ route, navigation }: any) {
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const { data } = await workItemApi.getOne(id);
-      setItem(data);
+      // History is fetched alongside the item so the audit trail refreshes with it.
+      const [detail, hist] = await Promise.all([
+        workItemApi.getOne(id),
+        workItemApi.history(id).catch(() => ({ data: [] })),
+      ]);
+      setItem(detail.data);
+      setHistory(Array.isArray(hist.data) ? hist.data : []);
       setOffline(false);
     } catch {
       setOffline(true);
@@ -343,6 +353,9 @@ export default function WorkItemDetailScreen({ route, navigation }: any) {
             <FieldRow label="Closed" value={fmtDate(item.closedAt)} />
             <FieldRow label="Created by" value={item.createdByName} />
             <FieldRow label="Created" value={fmtDate(item.createdAt)} />
+            {/* Who touched it last — the other half of the audit question. */}
+            <FieldRow label="Updated by" value={item.updatedByName || '—'} />
+            <FieldRow label="Last updated" value={item.updatedAt ? `${fmtDate(item.updatedAt)} · ${timeAgo(item.updatedAt)}` : '—'} />
             {!!item.tags?.length && <FieldRow label="Tags" value={item.tags.join(', ')} />}
           </View>
         </View>
@@ -394,6 +407,31 @@ export default function WorkItemDetailScreen({ route, navigation }: any) {
           </View>
         )}
 
+        {/* ── History: the full audit trail for this item ── */}
+        <View style={st.card}>
+          <TouchableOpacity
+            style={st.historyHead}
+            activeOpacity={0.8}
+            onPress={() => setHistoryOpen((o) => !o)}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={st.cardTitle}>HISTORY</Text>
+              <Text style={st.cardSub}>
+                {history.length
+                  ? `${history.length} change${history.length === 1 ? '' : 's'} · last ${timeAgo(history[0]?.createdAt)}`
+                  : 'No changes recorded yet'}
+              </Text>
+            </View>
+            <Text style={st.historyToggle}>{historyOpen ? 'Hide' : 'Show'}</Text>
+          </TouchableOpacity>
+
+          {historyOpen && (
+            <View style={{ marginTop: 12 }}>
+              <ActivityFeed entries={history} emptyText="No changes recorded for this item yet." />
+            </View>
+          )}
+        </View>
+
         {canManage && (
           <TouchableOpacity style={st.deleteBtn} onPress={onDelete} activeOpacity={0.85}>
             <Text style={st.deleteTx}>Delete work item</Text>
@@ -420,6 +458,8 @@ const st = StyleSheet.create({
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 12, fontWeight: '800', color: T.ink, letterSpacing: 0.8 },
   cardSub: { fontSize: 11.5, color: T.faint, marginTop: 2, marginBottom: 8 },
+  historyHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  historyToggle: { fontSize: 12, fontWeight: '700', color: T.primary },
   cardAction: { fontSize: 12, fontWeight: '700', color: T.primary },
 
   titleTop: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },

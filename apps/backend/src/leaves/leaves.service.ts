@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Inject, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -10,6 +10,7 @@ import { NotificationType } from '../notifications/entities/notification.entity'
 import { MailService } from '../mail/mail.service';
 import { UsersService } from '../users/users.service';
 import { UserRole } from '../users/entities/user.entity';
+import { clampPaging } from '../common/utils/pagination';
 
 @Injectable()
 export class LeavesService {
@@ -52,8 +53,15 @@ export class LeavesService {
     return saved;
   }
 
-  async findAll(): Promise<Leave[]> {
-    return this.leaveRepo.find({ relations: { employee: true } });
+  /** Org-wide leave, bounded and newest-first (backs the approvals inbox). */
+  async findAll(limit?: number, offset?: number): Promise<Leave[]> {
+    const { take, skip } = clampPaging(limit, offset);
+    return this.leaveRepo.find({
+      relations: { employee: true },
+      order: { createdAt: 'DESC' },
+      take,
+      skip,
+    });
   }
 
   async findByEmployee(employeeId: string): Promise<Leave[]> {
@@ -94,10 +102,17 @@ export class LeavesService {
     return saved;
   }
 
-  /** Employee withdraws their own pending leave request. */
-  async cancel(id: string): Promise<Leave> {
+  /**
+   * Employee withdraws their own pending leave request. `actorEmployeeId` is
+   * checked against the applicant unless the caller is privileged — otherwise
+   * anyone could cancel a colleague's approved-in-waiting leave by id.
+   */
+  async cancel(id: string, actor?: { privileged?: boolean; actorEmployeeId?: string }): Promise<Leave> {
     const leave = await this.leaveRepo.findOne({ where: { id }, relations: { employee: true } });
     if (!leave) throw new NotFoundException('Leave not found');
+    if (!actor?.privileged && leave.employee?.id !== actor?.actorEmployeeId) {
+      throw new ForbiddenException('You can only cancel your own leave request.');
+    }
     if (leave.status !== LeaveStatus.PENDING) {
       throw new BadRequestException('Only pending leaves can be cancelled');
     }

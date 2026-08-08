@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
@@ -21,19 +22,24 @@ export class AuthController {
     return this.authService.register(dto);
   }
 
+  // Credential endpoints get their own tight limit. The global 300/60s ceiling
+  // is sized for a chatty mobile client and is far too generous for brute force.
   @Post('login')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
 
   @Post('forgot-password')
+  @Throttle({ default: { limit: 5, ttl: 300_000 } })
   @HttpCode(HttpStatus.OK)
   forgotPassword(@Body('email') email: string) {
     return this.authService.forgotPassword(email);
   }
 
   @Post('reset-password')
+  @Throttle({ default: { limit: 10, ttl: 300_000 } })
   @HttpCode(HttpStatus.OK)
   resetPassword(
     @Body('email') email: string,

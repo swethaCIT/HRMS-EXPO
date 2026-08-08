@@ -146,6 +146,8 @@ const approvalsSlice = createSlice({
   name: 'approvals',
   initialState,
   reducers: {
+    /** Wipe on sign-out so the next user never inherits these approvals. */
+    resetApprovals: () => initialState,
     approve: (state, action: PayloadAction<string>) => {
       const it = state.items.find((i) => i.id === action.payload);
       if (!it) return;
@@ -189,5 +191,5 @@ const approvalsSlice = createSlice({
   },
 });
 
-export const { approve, reject, approveAllPending } = approvalsSlice.actions;
+export const { approve, reject, approveAllPending, resetApprovals } = approvalsSlice.actions;
 export default approvalsSlice.reducer;

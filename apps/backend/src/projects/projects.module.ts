@@ -5,7 +5,9 @@ import { ProjectTeam, ProjectTeamMember } from './entities/project-team.entity';
 import { Sprint } from './entities/sprint.entity';
 import { WorkItem } from './entities/work-item.entity';
 import { WorkLog } from './entities/work-log.entity';
+import { ProjectActivity } from './entities/project-activity.entity';
 import { Employee } from '../employees/entities/employee.entity';
+import { ActivityService } from './activity.service';
 import { ProjectsService } from './projects.service';
 import { SprintsService } from './sprints.service';
 import { WorkItemsService } from './work-items.service';
@@ -18,12 +20,14 @@ import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Project, ProjectTeam, ProjectTeamMember, Sprint, WorkItem, WorkLog, Employee]),
+    TypeOrmModule.forFeature([
+      Project, ProjectTeam, ProjectTeamMember, Sprint, WorkItem, WorkLog, ProjectActivity, Employee,
+    ]),
     NotificationsModule,
     MailModule,
   ],
   controllers: [ProjectsController, SprintsController, WorkItemsController],
-  providers: [ProjectsService, SprintsService, WorkItemsService, ReportsService],
+  providers: [ActivityService, ProjectsService, SprintsService, WorkItemsService, ReportsService],
   exports: [ProjectsService, WorkItemsService],
 })
 export class ProjectsModule {}

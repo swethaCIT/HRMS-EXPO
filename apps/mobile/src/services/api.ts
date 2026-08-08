@@ -1,24 +1,41 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL, API_NOT_CONFIGURED_MESSAGE, isApiConfigured } from '../config/env';
 
-// `10.0.2.2` is the Android emulator's alias for the host machine's localhost,
-// so this reaches the backend on the host at :3000 in both debug and release
-// builds on the emulator. Swap to the real API host once the backend is deployed.
-const BASE_URL = 'http://10.0.2.2:3000/api/v1';
-
-const api = axios.create({ baseURL: BASE_URL, timeout: 10000 });
+// The host lives in one place — see src/config/env.ts. Debug builds point at a
+// dev machine; release builds require PRODUCTION_API_BASE_URL to be set.
+const api = axios.create({ baseURL: API_BASE_URL, timeout: 10000 });
 
 api.interceptors.request.use(async (config) => {
+  // Fail loudly rather than firing requests at an empty base URL, which axios
+  // would resolve against nothing and report as an opaque network error.
+  if (!isApiConfigured) return Promise.reject(new Error(API_NOT_CONFIGURED_MESSAGE));
   const token = await AsyncStorage.getItem('access_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
+/**
+ * Called when the server rejects our token. Registered by the store at startup
+ * so this module can trigger a sign-out without importing the store (which
+ * would be a require cycle: store → api → store).
+ */
+type SessionExpiredHandler = () => void;
+let onSessionExpired: SessionExpiredHandler | null = null;
+export function setSessionExpiredHandler(handler: SessionExpiredHandler) {
+  onSessionExpired = handler;
+}
+
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     if (error.response?.status === 401) {
+      // Clearing storage alone left Redux still holding a token, so the app kept
+      // rendering the signed-in tabs while every request 401'd and each screen
+      // quietly swapped in mock data. Drive a real sign-out instead.
       await AsyncStorage.removeItem('access_token');
+      await AsyncStorage.removeItem('auth_cache');
+      onSessionExpired?.();
     }
     return Promise.reject(error);
   },
@@ -152,10 +169,18 @@ export const projectApi = {
   team: (teamId: string) => api.get(`/projects/teams/${teamId}`),
   removeTeam: (teamId: string) => api.delete(`/projects/teams/${teamId}`),
   addMember: (teamId: string, data: any) => api.post(`/projects/teams/${teamId}/members`, data),
+  /** Batch add from the member picker — partial success is reported, not fatal. */
+  addMembers: (teamId: string, members: any[]) => api.post(`/projects/teams/${teamId}/members/batch`, { members }),
+  /** Manager grants/revokes access, or changes a member's role/capacity. */
+  updateMember: (memberId: string, data: any) => api.patch(`/projects/teams/members/${memberId}`, data),
   removeMember: (memberId: string) => api.delete(`/projects/teams/members/${memberId}`),
+  /** What the signed-in user may do on this team: read | contribute | manage. */
+  myAccess: (teamId: string) => api.get(`/projects/teams/${teamId}/my-access`),
   // Sprints
   sprints: (id: string) => api.get(`/projects/${id}/sprints`),
   createSprint: (id: string, data: any) => api.post(`/projects/${id}/sprints`, data),
+  // Audit feed
+  activity: (id: string, limit?: number) => api.get(`/projects/${id}/activity`, { params: { limit } }),
   // Reports
   report: (id: string) => api.get(`/projects/${id}/report`),
   memberReports: (id: string) => api.get(`/projects/${id}/report/members`),
@@ -165,6 +190,8 @@ export const projectApi = {
 export const sprintApi = {
   // `teamId` narrows the burndown to a single squad's slice of the sprint.
   burndown: (id: string, teamId?: string) => api.get(`/sprints/${id}/burndown`, { params: { teamId } }),
+  /** Every team's curve plus the combined project curve, on shared day labels. */
+  burndownByTeam: (id: string) => api.get(`/sprints/${id}/burndown/teams`),
   update: (id: string, data: any) => api.patch(`/sprints/${id}`, data),
   remove: (id: string) => api.delete(`/sprints/${id}`),
 };
@@ -180,6 +207,8 @@ export const workItemApi = {
   remove: (id: string) => api.delete(`/work-items/${id}`),
   logs: (id: string) => api.get(`/work-items/${id}/logs`),
   logWork: (id: string, data: any) => api.post(`/work-items/${id}/logs`, data),
+  /** Audit trail for one item: who changed what, when. */
+  history: (id: string) => api.get(`/work-items/${id}/history`),
 };
 
 /* ── Team Calendar ── */
@@ -187,7 +216,7 @@ export const workItemApi = {
 export const calendarApi = {
   listRange: (start: string, end: string) => api.get('/calendar/events', { params: { start, end } }),
   upcoming: () => api.get('/calendar/upcoming'),
-  searchEmployees: (params: { q?: string; page?: number; limit?: number; start?: string; end?: string }) =>
+  searchEmployees: (params: { q?: string; page?: number; limit?: number; start?: string; end?: string; excludeEventId?: string }) =>
     api.get('/calendar/employees/search', { params }),
   getOne: (id: string) => api.get(`/calendar/events/${id}`),
   create: (data: any) => api.post('/calendar/events', data),

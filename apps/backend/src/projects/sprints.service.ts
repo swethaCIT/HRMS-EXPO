@@ -5,6 +5,7 @@ import { Sprint, SprintStatus } from './entities/sprint.entity';
 import { WorkItem, WorkItemState } from './entities/work-item.entity';
 import { WorkLog } from './entities/work-log.entity';
 import { Project } from './entities/project.entity';
+import { ProjectTeam } from './entities/project-team.entity';
 import { CreateSprintDto, UpdateSprintDto } from './dto/project.dto';
 import { round1 } from './util';
 
@@ -23,7 +24,65 @@ export class SprintsService {
     @InjectRepository(WorkItem) private readonly itemRepo: Repository<WorkItem>,
     @InjectRepository(WorkLog) private readonly logRepo: Repository<WorkLog>,
     @InjectRepository(Project) private readonly projectRepo: Repository<Project>,
+    @InjectRepository(ProjectTeam) private readonly teamRepo: Repository<ProjectTeam>,
   ) {}
+
+  /**
+   * Every team's burndown for one sprint, plus the combined project curve —
+   * this is what the "all teams" comparison chart draws. Each series shares the
+   * same day labels so they can be overlaid directly.
+   */
+  async burndownByTeam(sprintId: string) {
+    const sprint = await this.sprintRepo.findOne({ where: { id: sprintId } });
+    if (!sprint) throw new NotFoundException('Sprint not found');
+
+    const teams = await this.teamRepo.find({ where: { projectId: sprint.projectId }, order: { createdAt: 'ASC' } });
+    const combined = await this.burndown(sprintId);
+
+    const series = await Promise.all(
+      teams.map(async (t) => {
+        const b = await this.burndown(sprintId, t.id);
+        return {
+          teamId: t.id,
+          name: t.name,
+          managerName: t.managerName,
+          unit: b.unit,
+          total: b.total,
+          actual: b.actual,
+          ideal: b.ideal,
+          currentRemaining: b.currentRemaining,
+          variance: b.variance,
+          itemsTotal: b.itemsTotal,
+          itemsClosed: b.itemsClosed,
+          itemsActive: b.itemsActive,
+          hoursLogged: b.hoursLogged,
+          progress: b.itemsTotal ? Math.round((b.itemsClosed / b.itemsTotal) * 100) : 0,
+        };
+      }),
+    );
+
+    return {
+      sprint,
+      labels: combined.labels,
+      daysTotal: combined.daysTotal,
+      daysElapsed: combined.daysElapsed,
+      daysLeft: combined.daysLeft,
+      combined: {
+        unit: combined.unit,
+        total: combined.total,
+        ideal: combined.ideal,
+        actual: combined.actual,
+        currentRemaining: combined.currentRemaining,
+        variance: combined.variance,
+        itemsTotal: combined.itemsTotal,
+        itemsClosed: combined.itemsClosed,
+        progress: combined.itemsTotal ? Math.round((combined.itemsClosed / combined.itemsTotal) * 100) : 0,
+      },
+      // Teams with nothing in this sprint are dropped — an empty flat line adds noise.
+      teams: series.filter((s) => s.itemsTotal > 0),
+      teamsWithoutWork: series.filter((s) => s.itemsTotal === 0).map((s) => ({ teamId: s.teamId, name: s.name })),
+    };
+  }
 
   /** Sprint list for a project, each with its own completion rollup. */
   async findByProject(projectId: string) {
@@ -48,7 +107,7 @@ export class SprintsService {
     });
   }
 
-  async create(projectId: string, dto: CreateSprintDto) {
+  async create(projectId: string, dto: CreateSprintDto, actor?: { id?: string; name?: string }) {
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
     if (!project) throw new NotFoundException('Project not found');
     const sprint = this.sprintRepo.create({
@@ -57,6 +116,8 @@ export class SprintsService {
       startDate: new Date(dto.startDate),
       endDate: new Date(dto.endDate),
       status: dto.status ?? this.statusFor(new Date(dto.startDate), new Date(dto.endDate)),
+      createdById: actor?.id,
+      createdByName: actor?.name,
     });
     const saved = await this.sprintRepo.save(sprint);
     // Only one sprint can be "current" per project — demote any other.

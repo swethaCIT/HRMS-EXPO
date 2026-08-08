@@ -6,9 +6,12 @@ import { ProjectTeam, ProjectTeamMember } from './entities/project-team.entity';
 import { Sprint, SprintStatus } from './entities/sprint.entity';
 import { WorkItem, WorkItemState } from './entities/work-item.entity';
 import { WorkLog } from './entities/work-log.entity';
-import { AddTeamMemberDto, CreateProjectDto, CreateTeamDto, UpdateProjectDto } from './dto/project.dto';
+import { AddTeamMemberDto, CreateProjectDto, CreateTeamDto, UpdateProjectDto, UpdateTeamMemberDto } from './dto/project.dto';
 import { Employee } from '../employees/entities/employee.entity';
 import { round1 } from './util';
+import { TeamAccessLevel } from './entities/project-team.entity';
+import { ActivityService, Actor } from './activity.service';
+import { ActivityAction, ActivityEntity } from './entities/project-activity.entity';
 
 /** Deterministic accent colour so a project always renders the same shade. */
 const COLORS = ['#4F46E5', '#0EA5E9', '#10B981', '#F59E0B', '#EC4899', '#7C3AED', '#14B8A6', '#EF4444'];
@@ -23,6 +26,7 @@ export class ProjectsService {
     @InjectRepository(WorkItem) private readonly itemRepo: Repository<WorkItem>,
     @InjectRepository(WorkLog) private readonly logRepo: Repository<WorkLog>,
     @InjectRepository(Employee) private readonly employeeRepo: Repository<Employee>,
+    private readonly activity: ActivityService,
   ) {}
 
   /**
@@ -75,7 +79,17 @@ export class ProjectsService {
       ownerId: owner?.id,
       ownerName: owner?.name,
     });
-    return this.projectRepo.save(project);
+    const saved = await this.projectRepo.save(project);
+    await this.activity.record({
+      projectId: saved.id,
+      entityType: ActivityEntity.PROJECT,
+      entityId: saved.id,
+      entityTitle: saved.name,
+      action: ActivityAction.CREATED,
+      actor: owner,
+      summary: `${owner?.name || 'Someone'} created project "${saved.name}"`,
+    });
+    return saved;
   }
 
   /**
@@ -172,15 +186,37 @@ export class ProjectsService {
     };
   }
 
-  async update(id: string, dto: UpdateProjectDto): Promise<Project> {
+  async update(id: string, dto: UpdateProjectDto, actor?: Actor): Promise<Project> {
     const project = await this.projectRepo.findOne({ where: { id } });
     if (!project) throw new NotFoundException('Project not found');
+    const before = { ...project };
     Object.assign(project, {
       ...dto,
       startDate: dto.startDate ? new Date(dto.startDate) : project.startDate,
       targetDate: dto.targetDate ? new Date(dto.targetDate) : project.targetDate,
+      updatedById: actor?.id ?? project.updatedById,
+      updatedByName: actor?.name ?? project.updatedByName,
     });
-    return this.projectRepo.save(project);
+    const saved = await this.projectRepo.save(project);
+
+    const changes = this.activity.diff(before, saved as any);
+    if (changes.length) {
+      await this.activity.record({
+        projectId: saved.id,
+        entityType: ActivityEntity.PROJECT,
+        entityId: saved.id,
+        entityTitle: saved.name,
+        action: ActivityAction.UPDATED,
+        actor,
+        changes,
+      });
+    }
+    return saved;
+  }
+
+  /** Recent activity across the whole project — the audit feed. */
+  activityFeed(projectId: string, limit?: number) {
+    return this.activity.forProject(projectId, limit ?? 100);
   }
 
   /** Deleting a project removes everything hanging off it (no orphan rows). */
@@ -204,10 +240,47 @@ export class ProjectsService {
     return teams.map((t) => ({ ...t, members: members.filter((m) => m.teamId === t.id) }));
   }
 
-  async createTeam(projectId: string, dto: CreateTeamDto) {
+  /**
+   * Create one of a project's teams. A project can hold any number of them, each
+   * with its own manager, roster and sprint burndown.
+   */
+  async createTeam(projectId: string, dto: CreateTeamDto, actor?: Actor) {
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
     if (!project) throw new NotFoundException('Project not found');
-    return this.teamRepo.save(this.teamRepo.create({ ...dto, projectId }));
+    const dup = await this.teamRepo.findOne({ where: { projectId, name: dto.name } });
+    if (dup) throw new BadRequestException(`This project already has a team called "${dto.name}"`);
+
+    const team = await this.teamRepo.save(
+      this.teamRepo.create({ ...dto, projectId, createdById: actor?.id, createdByName: actor?.name }),
+    );
+
+    // The team's manager is automatically on the roster with full control —
+    // otherwise nobody could administer the team they were just put in charge of.
+    if (dto.managerEmployeeId) {
+      await this.memberRepo.save(
+        this.memberRepo.create({
+          teamId: team.id,
+          projectId,
+          employeeId: dto.managerEmployeeId,
+          name: dto.managerName || 'Team manager',
+          role: 'Team Manager',
+          accessLevel: TeamAccessLevel.MANAGE,
+          addedById: actor?.id,
+          addedByName: actor?.name,
+        }),
+      );
+    }
+
+    await this.activity.record({
+      projectId,
+      entityType: ActivityEntity.TEAM,
+      entityId: team.id,
+      entityTitle: team.name,
+      action: ActivityAction.CREATED,
+      actor,
+      summary: `${actor?.name || 'Someone'} created team "${team.name}"`,
+    });
+    return team;
   }
 
   async removeTeam(teamId: string) {
@@ -221,19 +294,111 @@ export class ProjectsService {
     return { success: true };
   }
 
-  async addMember(teamId: string, dto: AddTeamMemberDto) {
+  /** Put an employee on a team, with the access level the manager chose. */
+  async addMember(teamId: string, dto: AddTeamMemberDto, actor?: Actor) {
     const team = await this.teamRepo.findOne({ where: { id: teamId } });
     if (!team) throw new NotFoundException('Team not found');
     const exists = await this.memberRepo.findOne({ where: { teamId, employeeId: dto.employeeId } });
-    if (exists) throw new BadRequestException('That person is already on this team');
-    return this.memberRepo.save(
-      this.memberRepo.create({ ...dto, teamId, projectId: team.projectId, capacityHoursPerDay: dto.capacityHoursPerDay ?? 8 }),
+    if (exists) throw new BadRequestException(`${dto.name} is already on this team`);
+
+    const member = await this.memberRepo.save(
+      this.memberRepo.create({
+        ...dto,
+        teamId,
+        projectId: team.projectId,
+        accessLevel: dto.accessLevel ?? TeamAccessLevel.CONTRIBUTE,
+        capacityHoursPerDay: dto.capacityHoursPerDay ?? 8,
+        addedById: actor?.id,
+        addedByName: actor?.name,
+      }),
     );
+
+    await this.activity.record({
+      projectId: team.projectId,
+      entityType: ActivityEntity.TEAM,
+      entityId: teamId,
+      entityTitle: team.name,
+      action: ActivityAction.MEMBER_ADDED,
+      actor,
+      summary: `${actor?.name || 'Someone'} added ${dto.name} to ${team.name} with ${member.accessLevel} access`,
+    });
+    return member;
   }
 
-  async removeMember(memberId: string) {
+  /** Batch version — the mobile picker adds a whole selection at once. */
+  async addMembers(teamId: string, members: AddTeamMemberDto[], actor?: Actor) {
+    const added: ProjectTeamMember[] = [];
+    const skipped: { name: string; reason: string }[] = [];
+    for (const m of members) {
+      try {
+        added.push(await this.addMember(teamId, m, actor));
+      } catch (err: any) {
+        // One duplicate shouldn't discard the rest of the selection.
+        skipped.push({ name: m.name, reason: err?.message ?? 'Could not add' });
+      }
+    }
+    return { added, skipped };
+  }
+
+  /** Change a member's access level / role / capacity — the manager's access control. */
+  async updateMember(memberId: string, dto: UpdateTeamMemberDto, actor?: Actor) {
+    const member = await this.memberRepo.findOne({ where: { id: memberId } });
+    if (!member) throw new NotFoundException('Team member not found');
+    const team = await this.teamRepo.findOne({ where: { id: member.teamId } });
+    const before = { ...member };
+
+    Object.assign(member, dto);
+    const saved = await this.memberRepo.save(member);
+
+    const changes = this.activity.diff(before, saved as any);
+    if (changes.length) {
+      await this.activity.record({
+        projectId: member.projectId,
+        entityType: ActivityEntity.TEAM,
+        entityId: member.teamId,
+        entityTitle: team?.name,
+        action: dto.accessLevel ? ActivityAction.ACCESS_CHANGED : ActivityAction.UPDATED,
+        actor,
+        changes,
+        summary:
+          dto.accessLevel != null
+            ? `${actor?.name || 'Someone'} set ${saved.name}'s access to ${saved.accessLevel}`
+            : undefined,
+      });
+    }
+    return saved;
+  }
+
+  async removeMember(memberId: string, actor?: Actor) {
+    const member = await this.memberRepo.findOne({ where: { id: memberId } });
+    if (!member) return { success: true };
+    const team = await this.teamRepo.findOne({ where: { id: member.teamId } });
     await this.memberRepo.delete({ id: memberId });
+
+    await this.activity.record({
+      projectId: member.projectId,
+      entityType: ActivityEntity.TEAM,
+      entityId: member.teamId,
+      entityTitle: team?.name,
+      action: ActivityAction.MEMBER_REMOVED,
+      actor,
+      summary: `${actor?.name || 'Someone'} removed ${member.name} from ${team?.name ?? 'the team'}`,
+    });
     return { success: true };
+  }
+
+  /**
+   * What a given user may do on a team. Manager/HR/admin always get `manage`;
+   * everyone else gets the level their roster row grants (or read-only when
+   * they're not on the team at all).
+   */
+  async accessFor(teamId: string, user?: { id: string; role?: string }): Promise<TeamAccessLevel> {
+    if (!user?.id) return TeamAccessLevel.READ;
+    if (user.role && ['admin', 'hr', 'manager'].includes(user.role)) return TeamAccessLevel.MANAGE;
+    const employeeId = await this.employeeIdOf(user);
+    if (!employeeId) return TeamAccessLevel.READ;
+    const member = await this.memberRepo.findOne({ where: { teamId, employeeId } });
+    return member?.accessLevel ?? TeamAccessLevel.READ;
   }
 
   /** Team detail — members, their workload and the team's sprints. */

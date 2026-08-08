@@ -5,7 +5,7 @@ import {
 import { sprintApi, workItemApi } from '../../services/api';
 import { useLivePolling } from '../../utils/useLivePolling';
 import { Avatar, BoardHeader, EmptyState, OfflineNote, StatTile, StateChip, TypeBadge } from './components';
-import { Burndown, ColumnChart, ProgressBar, StateBar } from './charts';
+import { Burndown, ColumnChart, MultiTeamBurndown, ProgressBar, StateBar, TEAM_SERIES_COLORS } from './charts';
 import { fmtDate, fmtHours, refOf, STATE_META, T, WorkItem } from './boardTheme';
 
 /**
@@ -17,6 +17,7 @@ export default function SprintDetailScreen({ route, navigation }: any) {
   const projectKey: string | undefined = route?.params?.projectKey;
 
   const [burn, setBurn] = useState<any>(null);
+  const [teamBurn, setTeamBurn] = useState<any>(null);
   const [items, setItems] = useState<WorkItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -31,6 +32,12 @@ export default function SprintDetailScreen({ route, navigation }: any) {
     } catch {
       setOffline(true);
     }
+    try {
+      // Per-team curves for the comparison chart. Optional: if it fails the
+      // single combined burndown above is still shown.
+      const { data } = await sprintApi.burndownByTeam(sprintId);
+      setTeamBurn(data);
+    } catch { /* comparison chart is a bonus, not required */ }
     try {
       const { data } = await workItemApi.list({ sprintId });
       setItems(Array.isArray(data) ? data.filter((i: WorkItem) => i.state !== 'removed') : []);
@@ -135,6 +142,55 @@ export default function SprintDetailScreen({ route, navigation }: any) {
             <StatTile value={burn.daysLeft} label="Days left" color={burn.daysLeft <= 2 ? '#EF4444' : '#10B981'} />
           </View>
         </View>
+
+        {/* Every team's burndown on one chart, plus the combined project curve */}
+        {!!teamBurn?.teams?.length && (
+          <View style={st.card}>
+            <Text style={st.cardTitle}>TEAMS · BURNDOWN COMPARISON</Text>
+            <Text style={st.cardSub}>
+              {teamBurn.teams.length} team{teamBurn.teams.length === 1 ? '' : 's'} working this sprint
+              {teamBurn.teamsWithoutWork?.length ? ` · ${teamBurn.teamsWithoutWork.length} with no items` : ''}
+            </Text>
+            <MultiTeamBurndown
+              labels={teamBurn.labels}
+              ideal={teamBurn.combined.ideal}
+              teams={teamBurn.teams}
+              combined={teamBurn.combined.actual}
+            />
+
+            {/* Per-team standing, so the chart has numbers behind it */}
+            <View style={st.teamTable}>
+              {teamBurn.teams.map((t: any, i: number) => (
+                <TouchableOpacity
+                  key={t.teamId}
+                  style={[st.teamRow, i < teamBurn.teams.length - 1 && st.divider]}
+                  activeOpacity={0.8}
+                  onPress={() => navigation?.navigate('TeamDetail', { teamId: t.teamId })}
+                >
+                  <View style={[st.teamDot, { backgroundColor: TEAM_SERIES_COLORS[i % TEAM_SERIES_COLORS.length] }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={st.teamName} numberOfLines={1}>{t.name}</Text>
+                    <Text style={st.teamSub} numberOfLines={1}>
+                      {t.managerName ? `${t.managerName} · ` : ''}{t.itemsClosed}/{t.itemsTotal} done
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={st.teamVal}>{t.currentRemaining} left</Text>
+                    <Text style={[st.teamDelta, { color: t.variance >= 0 ? '#10B981' : '#EF4444' }]}>
+                      {t.variance >= 0 ? '▲ ahead' : '▼ behind'} {Math.abs(t.variance)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {!!teamBurn.teamsWithoutWork?.length && (
+              <Text style={st.noWork}>
+                No items this sprint: {teamBurn.teamsWithoutWork.map((t: any) => t.name).join(', ')}
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* Daily effort */}
         <View style={st.card}>
@@ -242,6 +298,17 @@ const st = StyleSheet.create({
   cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   cardTitle: { fontSize: 12, fontWeight: '800', color: T.ink, letterSpacing: 0.8 },
   cardSub: { fontSize: 11.5, color: T.faint, marginTop: 2, marginBottom: 12 },
+
+  /* per-team standings under the comparison chart */
+  teamTable: { marginTop: 14, borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 4 },
+  teamRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  divider: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  teamDot: { width: 10, height: 10, borderRadius: 3 },
+  teamName: { fontSize: 13.5, fontWeight: '700', color: T.ink },
+  teamSub: { fontSize: 11.5, color: T.sub, marginTop: 1 },
+  teamVal: { fontSize: 13, fontWeight: '800', color: T.ink },
+  teamDelta: { fontSize: 10.5, fontWeight: '700', marginTop: 1 },
+  noWork: { fontSize: 11, color: T.faint, marginTop: 10, fontStyle: 'italic' },
   varChip: { borderRadius: 7, paddingHorizontal: 9, paddingVertical: 5 },
   varChipTx: { fontSize: 10.5, fontWeight: '800' },
   statRow: { flexDirection: 'row', gap: 8, marginTop: 14 },

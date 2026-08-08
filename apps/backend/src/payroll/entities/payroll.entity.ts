@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Index, Unique } from 'typeorm';
 import { Employee } from '../../employees/entities/employee.entity';
 
 export enum PayrollStatus {
@@ -7,11 +7,18 @@ export enum PayrollStatus {
   PAID = 'paid',
 }
 
+/**
+ * One payslip per employee per month. Without this constraint, calling
+ * `POST /payroll/generate` twice silently created a duplicate payslip and every
+ * downstream total (and the employee's own history) doubled.
+ */
+@Unique('uq_payroll_employee_period', ['employee', 'month', 'year'])
 @Entity('payrolls')
 export class Payroll {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Index()
   @ManyToOne(() => Employee)
   @JoinColumn()
   employee: Employee;

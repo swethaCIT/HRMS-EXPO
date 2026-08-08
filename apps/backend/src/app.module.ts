@@ -25,6 +25,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { RegularizationsModule } from './regularizations/regularizations.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TeamCalendarModule } from './team-calendar/team-calendar.module';
+import { AccessControlModule } from './common/access/access-control.module';
 import { HealthController } from './health/health.controller';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
 import { getDatabaseConfig } from './config/database.config';
@@ -46,6 +47,7 @@ import { getDatabaseConfig } from './config/database.config';
     // In-memory cache (fast, zero external deps). Redis was causing connection
     // retry storms + slow/flaky startup when it wasn't running.
     CacheModule.register({ isGlobal: true, ttl: 300_000 }),
+    AccessControlModule,
     AuthModule,
     UsersModule,
     EmployeesModule,

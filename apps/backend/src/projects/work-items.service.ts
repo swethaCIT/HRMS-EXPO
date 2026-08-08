@@ -10,6 +10,8 @@ import { Employee } from '../employees/entities/employee.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { MailService } from '../mail/mail.service';
+import { ActivityService } from './activity.service';
+import { ActivityAction, ActivityEntity } from './entities/project-activity.entity';
 
 export interface WorkItemFilter {
   projectId?: string;
@@ -29,6 +31,14 @@ const TYPE_LABEL: Record<WorkItemType, string> = {
   [WorkItemType.BUG]: 'Bug',
 };
 
+const STATE_LABEL: Record<WorkItemState, string> = {
+  [WorkItemState.NEW]: 'New',
+  [WorkItemState.ACTIVE]: 'Active',
+  [WorkItemState.RESOLVED]: 'Resolved',
+  [WorkItemState.CLOSED]: 'Closed',
+  [WorkItemState.REMOVED]: 'Removed',
+};
+
 @Injectable()
 export class WorkItemsService {
   private readonly logger = new Logger(WorkItemsService.name);
@@ -40,6 +50,7 @@ export class WorkItemsService {
     @InjectRepository(Employee) private readonly employeeRepo: Repository<Employee>,
     private readonly notifications: NotificationsService,
     private readonly mail: MailService,
+    private readonly activity: ActivityService,
   ) {}
 
   /* ── Reads ── */
@@ -196,13 +207,32 @@ export class WorkItemsService {
     });
 
     const saved = await this.itemRepo.save(item);
+
+    await this.activity.record({
+      projectId: saved.projectId,
+      entityType: ActivityEntity.WORK_ITEM,
+      entityId: saved.id,
+      entityTitle: saved.title,
+      action: ActivityAction.CREATED,
+      actor,
+      summary: `${actor?.name || 'Someone'} created this ${TYPE_LABEL[saved.type]}`,
+    });
     if (saved.assigneeId) {
-      void this.notifyAssignee(saved, project.key, 'New work item assigned to you');
+      await this.activity.record({
+        projectId: saved.projectId,
+        entityType: ActivityEntity.WORK_ITEM,
+        entityId: saved.id,
+        entityTitle: saved.title,
+        action: ActivityAction.ASSIGNED,
+        actor,
+        changes: [{ field: 'Assigned to', from: null, to: saved.assigneeName ?? null }],
+      });
+      void this.notifyAssignee(saved, project.key, 'assigned', actor?.name);
     }
     return saved;
   }
 
-  async update(id: string, dto: UpdateWorkItemDto) {
+  async update(id: string, dto: UpdateWorkItemDto, actor?: { id?: string; name?: string }) {
     const item = await this.itemRepo.findOne({ where: { id } });
     if (!item) throw new NotFoundException('Work item not found');
 
@@ -218,32 +248,68 @@ export class WorkItemsService {
 
     const previousAssignee = item.assigneeId;
     const previousState = item.state;
+    // Snapshot before mutating so the history can show old → new per field.
+    const before = { ...item };
 
     Object.assign(item, {
       ...dto,
       startDate: dto.startDate ? new Date(dto.startDate) : item.startDate,
       targetDate: dto.targetDate ? new Date(dto.targetDate) : item.targetDate,
+      updatedById: actor?.id ?? item.updatedById,
+      updatedByName: actor?.name ?? item.updatedByName,
     });
     if (dto.state && dto.state !== previousState) this.stampState(item, dto.state);
 
     const saved = await this.itemRepo.save(item);
+
+    const changes = this.activity.diff(before, saved as any);
+    if (changes.length) {
+      await this.activity.record({
+        projectId: saved.projectId,
+        entityType: ActivityEntity.WORK_ITEM,
+        entityId: saved.id,
+        entityTitle: saved.title,
+        action:
+          saved.assigneeId !== previousAssignee
+            ? ActivityAction.ASSIGNED
+            : dto.state && dto.state !== previousState
+              ? ActivityAction.STATE_CHANGED
+              : ActivityAction.UPDATED,
+        actor,
+        changes,
+      });
+    }
+
     if (saved.assigneeId && saved.assigneeId !== previousAssignee) {
       const project = await this.projectRepo.findOne({ where: { id: saved.projectId } });
-      void this.notifyAssignee(saved, project?.key ?? '', 'Work item assigned to you');
+      void this.notifyAssignee(saved, project?.key ?? '', 'assigned', actor?.name);
     }
     return saved;
   }
 
-  async setState(id: string, dto: SetStateDto) {
+  async setState(id: string, dto: SetStateDto, actor?: { id?: string; name?: string }) {
     const item = await this.itemRepo.findOne({ where: { id } });
     if (!item) throw new NotFoundException('Work item not found');
     if (item.state === dto.state) return item;
+    const previousState = item.state;
     this.stampState(item, dto.state);
     if (dto.reason) item.reason = dto.reason;
+    item.updatedById = actor?.id ?? item.updatedById;
+    item.updatedByName = actor?.name ?? item.updatedByName;
     const saved = await this.itemRepo.save(item);
 
+    await this.activity.record({
+      projectId: saved.projectId,
+      entityType: ActivityEntity.WORK_ITEM,
+      entityId: saved.id,
+      entityTitle: saved.title,
+      action: ActivityAction.STATE_CHANGED,
+      actor,
+      changes: [{ field: 'State', from: previousState, to: dto.state }],
+    });
+
     const project = await this.projectRepo.findOne({ where: { id: saved.projectId } });
-    void this.notifyAssignee(saved, project?.key ?? '', `Work item moved to ${dto.state.toUpperCase()}`);
+    void this.notifyAssignee(saved, project?.key ?? '', 'state', actor?.name, previousState);
     return saved;
   }
 
@@ -278,19 +344,30 @@ export class WorkItemsService {
     }
   }
 
-  /** Soft delete: children are re-parented to this item's parent, never orphaned. */
-  async remove(id: string) {
+  /** Children are re-parented to this item's parent, never orphaned. */
+  async remove(id: string, actor?: { id?: string; name?: string }) {
     const item = await this.itemRepo.findOne({ where: { id } });
     if (!item) throw new NotFoundException('Work item not found');
     await this.itemRepo.update({ parentId: id }, { parentId: (item.parentId ?? null) as any });
     await this.logRepo.delete({ workItemId: id });
     await this.itemRepo.delete({ id });
+    // Recorded after the fact so the deletion still shows in the project feed
+    // even though the item row is gone.
+    await this.activity.record({
+      projectId: item.projectId,
+      entityType: ActivityEntity.WORK_ITEM,
+      entityId: item.id,
+      entityTitle: item.title,
+      action: ActivityAction.DELETED,
+      actor,
+      summary: `${actor?.name || 'Someone'} deleted ${TYPE_LABEL[item.type]} "${item.title}"`,
+    });
     return { success: true };
   }
 
   /* ── Time tracking ── */
 
-  async logWork(id: string, dto: LogWorkDto, actor?: { employeeId?: string; name?: string }) {
+  async logWork(id: string, dto: LogWorkDto, actor?: { employeeId?: string; name?: string; userId?: string }) {
     const item = await this.itemRepo.findOne({ where: { id } });
     if (!item) throw new NotFoundException('Work item not found');
     const employeeId = dto.employeeId || actor?.employeeId || item.assigneeId;
@@ -313,28 +390,99 @@ export class WorkItemsService {
       dto.remainingWork != null ? round1(dto.remainingWork) : round1(Math.max(0, (item.remainingWork || 0) - dto.hours));
     // Logging time against an untouched item means work has actually started.
     if (item.state === WorkItemState.NEW) this.stampState(item, WorkItemState.ACTIVE);
+    item.updatedById = actor?.userId ?? item.updatedById;
+    item.updatedByName = actor?.name ?? item.updatedByName;
     await this.itemRepo.save(item);
 
+    await this.activity.record({
+      projectId: item.projectId,
+      entityType: ActivityEntity.WORK_ITEM,
+      entityId: item.id,
+      entityTitle: item.title,
+      action: ActivityAction.WORK_LOGGED,
+      actor: { id: actor?.userId, name: dto.employeeName || actor?.name },
+      summary: `${dto.employeeName || actor?.name || 'Someone'} logged ${dto.hours}h · ${item.remainingWork}h remaining`,
+    });
+
     return { log, item };
+  }
+
+  /** History for one work item — the "who changed what, when" trail. */
+  history(id: string) {
+    return this.activity.forEntity(id);
   }
 
   listLogs(id: string) {
     return this.logRepo.find({ where: { workItemId: id }, order: { date: 'DESC' } });
   }
 
-  /** In-app + email + push to the assignee. Never breaks the write that triggered it. */
-  private async notifyAssignee(item: WorkItem, projectKey: string, title: string) {
+  /**
+   * Tell the assignee, on every channel: in-app notification, email and push.
+   * Never breaks the write that triggered it — a mail outage must not stop
+   * someone from assigning work.
+   */
+  private async notifyAssignee(
+    item: WorkItem,
+    projectKey: string,
+    kind: 'assigned' | 'state',
+    actorName?: string,
+    previousState?: WorkItemState,
+  ) {
     try {
       if (!item.assigneeId) return;
-      const employee = await this.employeeRepo.findOne({ where: { id: item.assigneeId }, relations: { user: true } });
+      const [employee, project] = await Promise.all([
+        this.employeeRepo.findOne({ where: { id: item.assigneeId }, relations: { user: true } }),
+        this.projectRepo.findOne({ where: { id: item.projectId } }),
+      ]);
       const user = employee?.user;
       if (!user?.id) return;
+
       const ref = `${projectKey ? `${projectKey}-` : '#'}${item.seq}`;
-      const body = `${ref} · ${TYPE_LABEL[item.type]}: ${item.title}`;
-      await this.notifications.createForUser(user.id, title, body, NotificationType.INFO);
-      if (user.email) await this.mail.send(user.email, title, body);
+      const who = actorName || 'Your manager';
+      const typeLabel = TYPE_LABEL[item.type];
+      const firstName = employee?.firstName ? ` ${employee.firstName}` : '';
+
+      const title =
+        kind === 'assigned'
+          ? `${who} assigned you a ${typeLabel}`
+          : `${ref} moved to ${STATE_LABEL[item.state]}`;
+
+      // Short line for the in-app list and the push payload.
+      const shortBody = `${ref} · ${typeLabel}: ${item.title}`;
+
+      // Fuller, human email — this is the "he assigned this to you" mail.
+      const lines =
+        kind === 'assigned'
+          ? [
+              `Hi${firstName},`,
+              ``,
+              `${who} has assigned the following ${typeLabel.toLowerCase()} to you.`,
+              ``,
+              `  ${ref} — ${item.title}`,
+              `  Project:  ${project?.name ?? '—'}`,
+              `  Type:     ${typeLabel}`,
+              `  State:    ${STATE_LABEL[item.state]}`,
+              `  Priority: P${item.priority}`,
+              item.originalEstimate ? `  Estimate: ${item.originalEstimate}h` : '',
+              item.targetDate ? `  Due:      ${new Date(item.targetDate).toDateString()}` : '',
+              item.description ? `\n${item.description}` : '',
+              ``,
+              `Open the HRMS app → Goals → ${project?.name ?? 'your project'} to pick it up.`,
+            ]
+          : [
+              `Hi${firstName},`,
+              ``,
+              `${who} moved ${ref} (${item.title}) from ${STATE_LABEL[previousState ?? WorkItemState.NEW]} to ${STATE_LABEL[item.state]}.`,
+              item.reason ? `Reason: ${item.reason}` : '',
+              ``,
+              `Open the HRMS app → Goals to see the board.`,
+            ];
+      const emailBody = lines.filter((l) => l !== '').join('\n');
+
+      await this.notifications.createForUser(user.id, title, shortBody, NotificationType.WORK_ITEM);
+      if (user.email) await this.mail.send(user.email, title, emailBody);
       if (user.fcmToken) {
-        await this.notifications.sendToDevice(user.fcmToken, title, body, { type: 'workItem', workItemId: item.id });
+        await this.notifications.sendToDevice(user.fcmToken, title, shortBody, { type: 'workItem', workItemId: item.id });
       }
     } catch (err: any) {
       this.logger.error(`Failed to notify work-item assignee: ${err?.message}`);

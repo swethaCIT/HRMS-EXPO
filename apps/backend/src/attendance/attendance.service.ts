@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Attendance, AttendanceStatus } from './entities/attendance.entity';
+import { clampPaging } from '../common/utils/pagination';
 
 interface PunchOpts {
   mode?: 'office' | 'wfh';
@@ -15,8 +16,20 @@ export class AttendanceService {
     private readonly attendanceRepo: Repository<Attendance>,
   ) {}
 
+  /**
+   * Today's calendar date in the SERVER's local zone — deliberately not
+   * `toISOString()`, which yields the UTC date. Writes go through TypeORM's
+   * `date` column conversion, which uses the local calendar date, so reading
+   * back with a UTC date desynchronises for any non-UTC server: at UTC+5:30,
+   * a punch between 00:00 and 05:30 local writes tomorrow's date but is looked
+   * up under yesterday's, so the record is never found — the UI shows "not
+   * checked in", every retry inserts another row, and check-out fails with
+   * "No check-in record found for today".
+   */
   private todayStr() {
-    return new Date().toISOString().split('T')[0];
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
   /** Today's record for an employee (or null). */
@@ -58,14 +71,33 @@ export class AttendanceService {
     return this.attendanceRepo.save(record);
   }
 
-  async findByEmployee(employeeId: string): Promise<Attendance[]> {
+  /**
+   * Newest first and always bounded. An employee accrues ~250 rows a year, so
+   * an unbounded read here grows without limit; callers page with limit/offset.
+   */
+  async findByEmployee(employeeId: string, limit?: number, offset?: number): Promise<Attendance[]> {
+    const { take, skip } = clampPaging(limit, offset);
     return this.attendanceRepo.find({
       where: { employee: { id: employeeId } },
       order: { date: 'DESC' },
+      take,
+      skip,
     });
   }
 
-  async findAll(): Promise<Attendance[]> {
-    return this.attendanceRepo.find({ relations: { employee: true } });
+  /**
+   * Org-wide attendance, bounded. At 1,000 employees this table gains ~250k
+   * rows a year; reading it whole materialised every row as an entity and
+   * serialised hundreds of MB, pinning a pool connection until the 15s
+   * statement timeout killed it.
+   */
+  async findAll(limit?: number, offset?: number): Promise<Attendance[]> {
+    const { take, skip } = clampPaging(limit, offset);
+    return this.attendanceRepo.find({
+      relations: { employee: true },
+      order: { date: 'DESC' },
+      take,
+      skip,
+    });
   }
 }

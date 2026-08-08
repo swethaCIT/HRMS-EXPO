@@ -29,14 +29,30 @@ export class TicketsService {
     return `tickets:mine:${userId}`;
   }
 
+  /**
+   * Next display id, derived from the highest existing number rather than
+   * `COUNT(*)`. `ticketId` is UNIQUE, and counting collides for two reasons:
+   * the seeded rows (TKT-1039, TKT-1043) are not the highest numbers, so the
+   * count-based id walks straight into them; and any deletion makes the count
+   * go backwards onto an id that already exists. Both surface as a 500 that
+   * blocks ticket creation entirely.
+   */
+  private async nextTicketId(): Promise<string> {
+    const rows = await this.ticketRepo.find({ select: { ticketId: true } });
+    const highest = rows.reduce((max, r) => {
+      const n = parseInt(String(r.ticketId).replace(/^\D+/, ''), 10);
+      return Number.isFinite(n) && n > max ? n : max;
+    }, 1000);
+    return `TKT-${highest + 1}`;
+  }
+
   async create(dto: CreateTicketDto, userId: string): Promise<Ticket> {
-    const count = await this.ticketRepo.count();
     const ticket = this.ticketRepo.create({
       ...dto,
       priority: dto.priority || 'Medium',
       status: 'Open',
       approval: 'Pending',
-      ticketId: `TKT-${1000 + count + 1}`,
+      ticketId: await this.nextTicketId(),
       createdById: userId,
     });
     const saved = await this.ticketRepo.save(ticket);

@@ -19,6 +19,126 @@ const niceMax = (v: number) => {
   return Math.ceil(v / pow) * pow;
 };
 
+/** Distinct series colours for the multi-team chart. */
+export const TEAM_SERIES_COLORS = ['#4F46E5', '#0EA5E9', '#10B981', '#F59E0B', '#EC4899', '#7C3AED', '#14B8A6', '#EF4444'];
+
+/**
+ * Every team's burndown on one set of axes, plus a faint dashed ideal line and
+ * the combined project curve in bold — the "all teams together" comparison.
+ */
+export function MultiTeamBurndown({
+  labels,
+  ideal,
+  teams,
+  combined,
+}: {
+  labels: string[];
+  ideal: number[];
+  teams: { teamId: string; name: string; actual: (number | null)[]; total: number }[];
+  combined?: (number | null)[];
+}) {
+  const h = 200;
+  const padL = 30;
+  const padR = 8;
+  const padT = 12;
+  const padB = 22;
+  const n = Math.max(1, labels.length);
+
+  const everyValue = [
+    ...ideal,
+    ...teams.flatMap((t) => t.actual.map((v) => v ?? 0)),
+    ...(combined ?? []).map((v) => v ?? 0),
+    1,
+  ];
+  const max = niceMax(Math.max(...everyValue));
+  const stepX = (CHART_W - padL - padR) / Math.max(1, n - 1);
+  const xOf = (i: number) => padL + stepX * i;
+  const yOf = (v: number) => padT + (h - padT - padB) * (1 - v / max);
+
+  const pointsOf = (series: (number | null)[]) =>
+    series
+      .map((v, i) => ({ v, i }))
+      .filter((p): p is { v: number; i: number } => p.v !== null)
+      .map((p) => `${xOf(p.i)},${yOf(p.v)}`)
+      .join(' ');
+
+  const labelEvery = Math.max(1, Math.ceil(n / 6));
+
+  return (
+    <View>
+      <Svg width={CHART_W} height={h}>
+        {[0, max / 2, max].map((g, i) => (
+          <G key={i}>
+            <Line x1={padL} y1={yOf(g)} x2={CHART_W - padR} y2={yOf(g)} stroke="#F3F4F6" strokeWidth={1} />
+            <SvgText x={0} y={yOf(g) + 3} fontSize={9} fill={T.faint}>{Math.round(g)}</SvgText>
+          </G>
+        ))}
+
+        {/* Ideal reference — faint, so the real curves stay dominant */}
+        <Polyline
+          points={ideal.map((v, i) => `${xOf(i)},${yOf(v)}`).join(' ')}
+          fill="none"
+          stroke={T.faint}
+          strokeWidth={1.5}
+          strokeDasharray="4 4"
+        />
+
+        {/* Combined project curve, drawn heaviest */}
+        {!!combined && (
+          <Polyline points={pointsOf(combined)} fill="none" stroke={T.ink} strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />
+        )}
+
+        {/* One line per team */}
+        {teams.map((t, ti) => (
+          <Polyline
+            key={t.teamId}
+            points={pointsOf(t.actual)}
+            fill="none"
+            stroke={TEAM_SERIES_COLORS[ti % TEAM_SERIES_COLORS.length]}
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        ))}
+      </Svg>
+
+      <View style={ms.xAxis}>
+        {labels.map((l, i) => (
+          <Text key={i} style={ms.xLabel}>{i % labelEvery === 0 ? l : ''}</Text>
+        ))}
+      </View>
+
+      <View style={ms.legend}>
+        {!!combined && (
+          <View style={ms.legendItem}>
+            <View style={[ms.legendLine, { backgroundColor: T.ink, height: 3 }]} />
+            <Text style={ms.legendTx}>All teams</Text>
+          </View>
+        )}
+        {teams.map((t, ti) => (
+          <View key={t.teamId} style={ms.legendItem}>
+            <View style={[ms.legendLine, { backgroundColor: TEAM_SERIES_COLORS[ti % TEAM_SERIES_COLORS.length] }]} />
+            <Text style={ms.legendTx} numberOfLines={1}>{t.name}</Text>
+          </View>
+        ))}
+        <View style={ms.legendItem}>
+          <View style={[ms.legendLine, { backgroundColor: T.faint }]} />
+          <Text style={ms.legendTx}>Ideal</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const ms = StyleSheet.create({
+  xAxis: { flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 30, paddingRight: 8, marginTop: -4 },
+  xLabel: { fontSize: 8.5, color: T.faint, flex: 1, textAlign: 'center' },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 12 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5, maxWidth: 130 },
+  legendLine: { width: 14, height: 2.5, borderRadius: 2 },
+  legendTx: { fontSize: 11, color: T.sub, flexShrink: 1 },
+});
+
 /* ── Sprint burndown: ideal (dashed) vs actual remaining (solid) ── */
 export function Burndown({
   labels,

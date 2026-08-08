@@ -57,6 +57,7 @@ import WorkItemDetailScreen   from '../screens/projects/WorkItemDetailScreen';
 import CreateWorkItemScreen   from '../screens/projects/CreateWorkItemScreen';
 import CreateProjectScreen    from '../screens/projects/CreateProjectScreen';
 import CreateTeamScreen       from '../screens/projects/CreateTeamScreen';
+import AddTeamMembersScreen   from '../screens/projects/AddTeamMembersScreen';
 import MyWorkItemsScreen      from '../screens/projects/MyWorkItemsScreen';
 
 /* Team Calendar — org-wide meeting scheduling */
@@ -130,6 +131,7 @@ const LEAF_SCREENS: [string, React.ComponentType<any>][] = [
   ['CreateWorkItem', CreateWorkItemScreen],
   ['CreateProject', CreateProjectScreen],
   ['CreateTeam', CreateTeamScreen],
+  ['AddTeamMembers', AddTeamMembersScreen],
   ['MyWorkItems', MyWorkItemsScreen],
   /* Team Calendar */
   ['TeamCalendar', TeamCalendarScreen],

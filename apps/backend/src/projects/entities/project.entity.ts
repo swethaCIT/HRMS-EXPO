@@ -47,6 +47,13 @@ export class Project {
   @Column({ nullable: true })
   ownerName: string;
 
+  /** Who last edited the project header. */
+  @Column({ nullable: true })
+  updatedById: string;
+
+  @Column({ nullable: true })
+  updatedByName: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

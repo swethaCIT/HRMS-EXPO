@@ -79,7 +79,22 @@ export class UsersService {
 
   /* ── Password reset ── */
   async setResetToken(id: string, resetTokenHash: string, resetTokenExpires: Date): Promise<void> {
-    await this.userRepo.update(id, { resetTokenHash, resetTokenExpires });
+    // Reset the attempt counter: a freshly issued code starts with a clean slate.
+    await this.userRepo.update(id, { resetTokenHash, resetTokenExpires, resetAttempts: 0 });
+  }
+
+  /** Record a failed OTP guess against the current reset token. */
+  async setResetAttempts(id: string, resetAttempts: number): Promise<void> {
+    await this.userRepo.update(id, { resetAttempts });
+  }
+
+  /** Invalidate the reset token — after use, or after too many wrong guesses. */
+  async clearResetToken(id: string): Promise<void> {
+    await this.userRepo.update(id, {
+      resetTokenHash: null as any,
+      resetTokenExpires: null as any,
+      resetAttempts: 0,
+    });
   }
 
   async setPassword(id: string, plainPassword: string): Promise<void> {

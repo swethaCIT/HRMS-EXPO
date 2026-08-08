@@ -35,6 +35,12 @@ export class Sprint {
   @Column({ type: 'enum', enum: SprintStatus, default: SprintStatus.FUTURE })
   status: SprintStatus;
 
+  /* ── Audit ── */
+  @Column({ nullable: true }) createdById: string;
+  @Column({ nullable: true }) createdByName: string;
+  @Column({ nullable: true }) updatedById: string;
+  @Column({ nullable: true }) updatedByName: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

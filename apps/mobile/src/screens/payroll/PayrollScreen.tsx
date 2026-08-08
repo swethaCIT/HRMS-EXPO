@@ -101,15 +101,13 @@ const HISTORY = [
   { month: 0, year: 2026, net: 87600, status: 'Paid' as const },
 ];
 
-/* employee + bank (replace with API / Redux user) */
-const EMPLOYEE = {
-  name: 'Adithya S', empId: 'EMP-2024-0142', designation: 'Software Engineer',
-  department: 'Engineering', doj: '12 Jan 2024',
-  pan: 'ABCDE1234F', uan: '100234567890',
-};
-const BANK = {
-  bankName: 'HDFC Bank', accountNo: '••••••3241', ifsc: 'HDFC0001234', mode: 'NEFT',
-};
+const NOT_ON_FILE = 'Not on file';
+
+/** Show only the last 4 of an account number, never the whole thing. */
+const maskAccount = (last4?: string | null) => (last4 ? `•••••• ${last4}` : NOT_ON_FILE);
+
+const fmtJoinDate = (d?: string | null) =>
+  d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : NOT_ON_FILE;
 
 /* ════════════════════════════════════════════════════════ */
 export default function PayrollScreen({ navigation }: any) {
@@ -119,6 +117,26 @@ export default function PayrollScreen({ navigation }: any) {
   const [picker, setPicker]     = useState<null | 'month' | 'year'>(null);
   const [slip, setSlip]         = useState<PaySlip>(CURRENT);
   const [offline, setOffline]   = useState(false);
+
+  /**
+   * Identity and bank rows come from the signed-in user's own employee record.
+   * These were previously hardcoded to one person — so every user was shown
+   * someone else's name, PAN and bank IFSC as if it were their own payslip.
+   */
+  const employeeDetails: [string, string][] = useMemo(() => [
+    ['Name', `${employee?.firstName ?? ''} ${employee?.lastName ?? ''}`.trim() || NOT_ON_FILE],
+    ['Employee ID', employee?.employeeId ?? NOT_ON_FILE],
+    ['Designation', employee?.designation ?? NOT_ON_FILE],
+    ['Department', employee?.department ?? NOT_ON_FILE],
+    ['Date of Joining', fmtJoinDate(employee?.dateOfJoining)],
+    ['PAN', employee?.pan ?? NOT_ON_FILE],
+    ['UAN', employee?.uan ?? NOT_ON_FILE],
+  ], [employee]);
+
+  const bankDetails: [string, string][] = useMemo(() => [
+    ['Bank Name', employee?.bankName ?? NOT_ON_FILE],
+    ['Account No.', maskAccount(employee?.bankLast4)],
+  ], [employee]);
 
   // Pull the latest real payslip; rebuild the slip from the DB figures.
   useEffect(() => {
@@ -348,18 +366,10 @@ export default function PayrollScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* ── Employee details ── */}
+        {/* ── Employee details ── (from the signed-in user's own record) */}
         <View style={s.card}>
           <Text style={s.cardTitle}>EMPLOYEE DETAILS</Text>
-          {[
-            ['Name', EMPLOYEE.name],
-            ['Employee ID', EMPLOYEE.empId],
-            ['Designation', EMPLOYEE.designation],
-            ['Department', EMPLOYEE.department],
-            ['Date of Joining', EMPLOYEE.doj],
-            ['PAN', EMPLOYEE.pan],
-            ['UAN', EMPLOYEE.uan],
-          ].map(([k, v]) => (
+          {employeeDetails.map(([k, v]) => (
             <View key={k} style={s.kvRow}>
               <Text style={s.kvKey}>{k}</Text>
               <Text style={s.kvVal}>{v}</Text>
@@ -370,17 +380,17 @@ export default function PayrollScreen({ navigation }: any) {
         {/* ── Bank details ── */}
         <View style={s.card}>
           <Text style={s.cardTitle}>BANK DETAILS</Text>
-          {[
-            ['Bank Name', BANK.bankName],
-            ['Account No.', BANK.accountNo],
-            ['IFSC Code', BANK.ifsc],
-            ['Payment Mode', BANK.mode],
-          ].map(([k, v]) => (
+          {bankDetails.map(([k, v]) => (
             <View key={k} style={s.kvRow}>
               <Text style={s.kvKey}>{k}</Text>
               <Text style={s.kvVal}>{v}</Text>
             </View>
           ))}
+          {!employee?.bankName && (
+            <Text style={s.kvNote}>
+              Bank details are not on file. Ask HR to add them to your profile.
+            </Text>
+          )}
         </View>
 
         {/* ── Salary history ── */}
@@ -567,6 +577,7 @@ const s = StyleSheet.create({
   kvRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
   kvKey: { fontSize: 13, color: '#6B7280' },
   kvVal: { fontSize: 13, color: '#1F2937', fontWeight: '600' },
+  kvNote: { fontSize: 11.5, color: '#9CA3AF', marginTop: 8, lineHeight: 16 },
 
   /* history */
   histRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },

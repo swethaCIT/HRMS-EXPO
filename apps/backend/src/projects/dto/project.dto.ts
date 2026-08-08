@@ -1,6 +1,8 @@
-import { IsArray, IsDateString, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsDateString, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { ProjectStatus } from '../entities/project.entity';
+import { TeamAccessLevel } from '../entities/project-team.entity';
 import { SprintStatus } from '../entities/sprint.entity';
 import { WorkItemState, WorkItemType } from '../entities/work-item.entity';
 
@@ -66,15 +68,49 @@ export class CreateTeamDto {
 }
 
 export class AddTeamMemberDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'Employee id (from GET /employees)' })
   @IsString()
   @IsNotEmpty()
   employeeId: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Display name, denormalised so rosters render without a join' })
   @IsString()
   @IsNotEmpty()
   name: string;
+
+  @ApiPropertyOptional({ description: 'Squad role, e.g. Developer / QA / Tech Lead' })
+  @IsOptional()
+  @IsString()
+  role?: string;
+
+  @ApiPropertyOptional({
+    enum: TeamAccessLevel,
+    description: 'What this member may do. Defaults to `contribute`.',
+  })
+  @IsOptional()
+  @IsEnum(TeamAccessLevel)
+  accessLevel?: TeamAccessLevel;
+
+  @ApiPropertyOptional({ description: 'Planning capacity, hours per day', default: 8 })
+  @IsOptional()
+  @IsNumber()
+  capacityHoursPerDay?: number;
+}
+
+/** Adds several people to a team in one call (the mobile picker sends a batch). */
+export class AddTeamMembersDto {
+  @ApiProperty({ type: [AddTeamMemberDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AddTeamMemberDto)
+  members: AddTeamMemberDto[];
+}
+
+export class UpdateTeamMemberDto {
+  @ApiPropertyOptional({ enum: TeamAccessLevel })
+  @IsOptional()
+  @IsEnum(TeamAccessLevel)
+  accessLevel?: TeamAccessLevel;
 
   @ApiPropertyOptional()
   @IsOptional()

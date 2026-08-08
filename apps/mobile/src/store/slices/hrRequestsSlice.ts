@@ -37,6 +37,8 @@ const hrRequestsSlice = createSlice({
   name: 'hrRequests',
   initialState,
   reducers: {
+    /** Wipe on sign-out so the next user never inherits these requests. */
+    resetHRRequests: () => initialState,
     issue: (state, action: PayloadAction<string>) => {
       const it = state.items.find((i) => i.id === action.payload);
       if (it) { it.status = 'issued'; requestApi.issue(it.id).catch(() => {}); }
@@ -58,5 +60,5 @@ const hrRequestsSlice = createSlice({
   },
 });
 
-export const { issue, rejectRequest, issueAllPending } = hrRequestsSlice.actions;
+export const { issue, rejectRequest, issueAllPending, resetHRRequests } = hrRequestsSlice.actions;
 export default hrRequestsSlice.reducer;

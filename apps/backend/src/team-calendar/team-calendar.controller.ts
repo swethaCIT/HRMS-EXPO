@@ -46,6 +46,7 @@ export class TeamCalendarController {
     @Query('limit') limit?: string,
     @Query('start') start?: string,
     @Query('end') end?: string,
+    @Query('excludeEventId') excludeEventId?: string,
   ) {
     return this.calendar.searchEmployees(
       q,
@@ -53,6 +54,7 @@ export class TeamCalendarController {
       limit ? +limit : undefined,
       start,
       end,
+      excludeEventId,
     );
   }
 

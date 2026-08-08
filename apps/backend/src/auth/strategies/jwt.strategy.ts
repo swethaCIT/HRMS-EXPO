@@ -13,10 +13,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly usersService: UsersService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {
+    const secret = config.get<string>('JWT_SECRET');
+    // Fail closed. A default here would be asymmetric with AuthModule/OnboardingModule,
+    // which sign with `JWT_SECRET` and no fallback: if the variable were ever missing,
+    // verification would still accept any token signed with the hardcoded,
+    // source-visible string — i.e. anyone could forge a token for any account.
+    if (!secret) {
+      throw new Error('JWT_SECRET is not set — refusing to start with an insecure default.');
+    }
+
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: config.get<string>('JWT_SECRET', 'fallback_secret'),
+      secretOrKey: secret,
     });
   }
 

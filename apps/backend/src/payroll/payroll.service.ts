@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payroll, PayrollStatus } from './entities/payroll.entity';
+import { clampPaging } from '../common/utils/pagination';
 
 @Injectable()
 export class PayrollService {
@@ -36,8 +37,15 @@ export class PayrollService {
     });
   }
 
-  async findAll(): Promise<Payroll[]> {
-    return this.payrollRepo.find({ relations: { employee: true } });
+  /** Org-wide payroll, bounded — grows by headcount × 12 every year. */
+  async findAll(limit?: number, offset?: number): Promise<Payroll[]> {
+    const { take, skip } = clampPaging(limit, offset);
+    return this.payrollRepo.find({
+      relations: { employee: true },
+      order: { year: 'DESC', month: 'DESC' },
+      take,
+      skip,
+    });
   }
 
   async markAsPaid(id: string): Promise<Payroll> {

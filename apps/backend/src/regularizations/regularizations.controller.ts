@@ -5,6 +5,7 @@ import { CreateRegularizationDto } from './dto/create-regularization.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole } from '../users/entities/user.entity';
 
 @ApiTags('regularizations')
@@ -29,9 +30,10 @@ export class RegularizationsController {
     return this.regularizationsService.findByEmployee(employeeId);
   }
 
+  /** Approver identity comes from the token, not the body — see LeavesController. */
   @Patch(':id/approve')
   @Roles(UserRole.MANAGER, UserRole.HR, UserRole.ADMIN)
-  approve(@Param('id') id: string, @Body('approverId') approverId: string) {
+  approve(@Param('id') id: string, @CurrentUser('id') approverId: string) {
     return this.regularizationsService.approve(id, approverId);
   }
 

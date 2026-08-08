@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { Employee } from '../../employees/entities/employee.entity';
 
 export enum LeaveType {
@@ -18,11 +18,14 @@ export enum LeaveStatus {
   CANCELLED = 'cancelled',
 }
 
+// getBalance() runs on every dashboard open and filters by employee + year.
+@Index('idx_leave_employee_start', ['employee', 'startDate'])
 @Entity('leaves')
 export class Leave {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Index()
   @ManyToOne(() => Employee)
   @JoinColumn()
   employee: Employee;

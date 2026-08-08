@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   OneToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
@@ -32,6 +33,12 @@ export class Employee {
   @JoinColumn()
   user: User;
 
+  /**
+   * Unique + indexed: this is the ordering key of the directory and the
+   * idempotency key both seed scripts rely on, but nothing at the database
+   * level stopped two rows sharing a code.
+   */
+  @Index({ unique: true })
   @Column()
   employeeId: string;
 

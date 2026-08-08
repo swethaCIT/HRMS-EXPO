@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi } from '../../services/api';
 import { AuthState, User } from '../../types';
 import { getErrorMessage } from '../../utils/errorMessage';
+import { ALLOW_DEMO_FALLBACK, API_NOT_CONFIGURED_MESSAGE, isApiConfigured } from '../../config/env';
 
 /** Infer a role from the email when the API doesn't supply one (demo / legacy tokens). */
 export function roleFromEmail(email: string): User['role'] {
@@ -48,10 +49,12 @@ export const login = createAsyncThunk(
       await AsyncStorage.setItem('auth_cache', JSON.stringify({ user, employee }));
       return { access_token: data.access_token, user, employee };
     } catch (err: any) {
-      // Demo fallback: when the backend isn't running, allow exploring the UI
-      // with any credentials. Real auth is used whenever the API is reachable.
+      // Demo fallback: DEBUG BUILDS ONLY. It grants whatever role the email
+      // implies, so in a shipped app it would be a complete authentication
+      // bypass — `admin@anything.com` plus any password would open the admin
+      // console. In release, a network failure must stay a failure.
       const isNetworkError = !err.response;
-      if (isNetworkError) {
+      if (isNetworkError && ALLOW_DEMO_FALLBACK) {
         const demo = {
           access_token: 'demo-token',
           user: {
@@ -64,6 +67,13 @@ export const login = createAsyncThunk(
         };
         await AsyncStorage.setItem('access_token', demo.access_token);
         return demo;
+      }
+      if (isNetworkError) {
+        return rejectWithValue(
+          isApiConfigured
+            ? 'Cannot reach the server. Check your connection and try again.'
+            : API_NOT_CONFIGURED_MESSAGE,
+        );
       }
       return rejectWithValue(getErrorMessage(err, 'Login failed'));
     }
@@ -122,6 +132,18 @@ const authSlice = createSlice({
     toggleViewMode: (state) => {
       state.viewMode = state.viewMode === 'manager' ? 'employee' : 'manager';
     },
+    /**
+     * The server rejected our token (401). Drop the session so the navigator
+     * returns to Login instead of rendering signed-in tabs over failing requests.
+     */
+    sessionExpired: (state) => {
+      state.token = null;
+      state.user = null;
+      state.employee = null;
+      state.booting = false;
+      state.isLoading = false;
+      state.error = 'Your session expired. Please sign in again.';
+    },
     /** Establish a session directly (used after onboarding self-registration auto-login). */
     setSession: (state, action: { payload: { access_token: string; user: User; employee?: any } }) => {
       state.token = action.payload.access_token;
@@ -164,5 +186,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, setViewMode, toggleViewMode, setSession } = authSlice.actions;
+export const { clearError, setViewMode, toggleViewMode, setSession, sessionExpired } = authSlice.actions;
 export default authSlice.reducer;

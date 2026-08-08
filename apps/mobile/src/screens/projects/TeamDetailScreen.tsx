@@ -11,7 +11,10 @@ import { getErrorMessage } from '../../utils/errorMessage';
 import Icon from '../../components/Icon';
 import { Avatar, BoardHeader, EmptyState, OfflineNote, StatTile, StateChip, TypeBadge } from './components';
 import { Burndown, ProgressBar } from './charts';
-import { fmtDate, fmtHours, refOf, SPRINT_STATUS_META, SprintStatus, T, WorkItem } from './boardTheme';
+import {
+  ACCESS_META, ACCESS_ORDER, fmtDate, fmtHours, refOf, SPRINT_STATUS_META,
+  SprintStatus, T, TeamAccessLevel, WorkItem,
+} from './boardTheme';
 
 /**
  * Team detail — who's on the squad, who runs it, its own sprint burndown and
@@ -83,6 +86,32 @@ export default function TeamDetailScreen({ route, navigation }: any) {
         },
       },
     ]);
+  };
+
+  const setAccess = async (member: any, accessLevel: TeamAccessLevel) => {
+    try {
+      await projectApi.updateMember(member.id, { accessLevel });
+      await load();
+    } catch (err) {
+      Alert.alert('Could not change access', getErrorMessage(err));
+    }
+  };
+
+  /** Manager's control panel for one member: grant access, or take them off. */
+  const manageMember = (member: any) => {
+    const current = (member.accessLevel ?? 'contribute') as TeamAccessLevel;
+    Alert.alert(
+      member.name,
+      `Access: ${ACCESS_META[current]?.label ?? current}\n\nWhat should ${member.name.split(' ')[0]} be able to do?`,
+      [
+        ...ACCESS_ORDER.filter((lvl) => lvl !== current).map((lvl) => ({
+          text: `Set to ${ACCESS_META[lvl].label} — ${ACCESS_META[lvl].blurb}`,
+          onPress: () => setAccess(member, lvl),
+        })),
+        { text: 'Remove from team', style: 'destructive' as const, onPress: () => removeMember(member) },
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    );
   };
 
   const role = useSelector((s: RootState) => s.auth.user?.role);
@@ -201,42 +230,67 @@ export default function TeamDetailScreen({ route, navigation }: any) {
         </View>
 
         {/* Members */}
-        <Text style={st.sectionTitle}>MEMBERS · {team.members?.length ?? 0}</Text>
+        <View style={st.sectionHead}>
+          <Text style={st.sectionTitle}>MEMBERS · {team.members?.length ?? 0}</Text>
+          {canManage && (
+            <TouchableOpacity
+              onPress={() =>
+                navigation?.navigate('AddTeamMembers', {
+                  teamId,
+                  teamName: team.name,
+                  existingIds: (team.members ?? []).map((m: any) => m.employeeId),
+                })
+              }
+              activeOpacity={0.8}
+            >
+              <Text style={st.addLink}>+ Add people</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <View style={st.card}>
           {(team.members ?? []).length === 0 ? (
             <Text style={st.muted}>No members on this squad yet.</Text>
           ) : (
-            team.members.map((m: any, i: number) => (
-              <TouchableOpacity
-                key={m.id}
-                style={[st.memberRow, i < team.members.length - 1 && st.divider]}
-                activeOpacity={0.85}
-                onPress={() =>
-                  projectId &&
-                  navigation?.navigate('MemberReport', { projectId, employeeId: m.employeeId, name: m.name, projectKey: team.projectKey })
-                }
-                onLongPress={() => canManage && removeMember(m)}
-              >
-                <Avatar name={m.name} size={36} />
-                <View style={{ flex: 1 }}>
-                  <Text style={st.memberName} numberOfLines={1}>{m.name}</Text>
-                  <Text style={st.memberRole} numberOfLines={1}>
-                    {m.role || 'Team member'} · {m.capacityHoursPerDay}h/day
-                  </Text>
-                  <View style={{ marginTop: 6 }}>
-                    <ProgressBar pct={m.completionPct} height={5} />
+            team.members.map((m: any, i: number) => {
+              const access = (m.accessLevel ?? 'contribute') as TeamAccessLevel;
+              const meta = ACCESS_META[access] ?? ACCESS_META.contribute;
+              return (
+                <TouchableOpacity
+                  key={m.id}
+                  style={[st.memberRow, i < team.members.length - 1 && st.divider]}
+                  activeOpacity={0.85}
+                  onPress={() =>
+                    projectId &&
+                    navigation?.navigate('MemberReport', { projectId, employeeId: m.employeeId, name: m.name, projectKey: team.projectKey })
+                  }
+                  onLongPress={() => canManage && manageMember(m)}
+                >
+                  <Avatar name={m.name} size={36} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={st.memberName} numberOfLines={1}>{m.name}</Text>
+                    <Text style={st.memberRole} numberOfLines={1}>
+                      {m.role || 'Team member'} · {m.capacityHoursPerDay}h/day
+                    </Text>
+                    <View style={st.accessRow}>
+                      <View style={[st.accessPill, { backgroundColor: meta.bg }]}>
+                        <Text style={[st.accessPillTx, { color: meta.fg }]}>{meta.label}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <ProgressBar pct={m.completionPct} height={5} />
+                      </View>
+                    </View>
                   </View>
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={st.memberVal}>{m.closed}/{m.assigned}</Text>
-                  <Text style={st.memberSub}>{fmtHours(m.hoursLogged)} logged</Text>
-                  <Text style={st.memberSub}>{fmtHours(m.remaining)} left</Text>
-                </View>
-              </TouchableOpacity>
-            ))
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={st.memberVal}>{m.closed}/{m.assigned}</Text>
+                    <Text style={st.memberSub}>{fmtHours(m.hoursLogged)} logged</Text>
+                    <Text style={st.memberSub}>{fmtHours(m.remaining)} left</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
           )}
         </View>
-        {canManage && <Text style={st.hint}>Long-press a member to remove them from the squad.</Text>}
+        {canManage && <Text style={st.hint}>Long-press a member to change their access or remove them.</Text>}
 
         {/* Open work */}
         {activeItems.length > 0 && (
@@ -309,6 +363,11 @@ const st = StyleSheet.create({
   linkTx: { fontSize: 12.5, fontWeight: '700', color: T.primary },
 
   sectionTitle: { fontSize: 12, fontWeight: '800', color: '#374151', letterSpacing: 0.8, marginBottom: 10 },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  addLink: { fontSize: 12.5, fontWeight: '700', color: T.primary, marginBottom: 10 },
+  accessRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  accessPill: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
+  accessPillTx: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.3 },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 11 },
   divider: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   memberName: { fontSize: 13.5, fontWeight: '700', color: T.ink },

@@ -17,6 +17,7 @@ export enum NotificationType {
   CALENDAR_UPDATE = 'calendar_update',
   CALENDAR_CANCEL = 'calendar_cancel',
   CALENDAR_REMINDER = 'calendar_reminder',
+  WORK_ITEM = 'work_item',
 }
 
 // Delivery status of the notification itself (email/push), independent of
@@ -60,6 +61,9 @@ export class Notification {
   // never re-check delivery, so they default to SENT. Only flows that dispatch
   // through `createPendingForUser`/`dispatch` (calendar invites/reminders) start
   // at PENDING and can end up FAILED for the retry job to pick up.
+  // Scanned by the retry cron every 60s — unindexed this is a full table scan
+  // of every notification ever sent, forever.
+  @Index()
   @Column({
     type: 'enum',
     enum: NotificationStatus,

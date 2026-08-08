@@ -24,10 +24,9 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: apps/mobile/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: apps/mobile
         run: npm ci
 
       - name: Run TypeScript check
@@ -58,10 +57,9 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: apps/mobile/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: apps/mobile
         run: npm ci
 
       - name: Build Android Release APK

@@ -40,9 +40,65 @@ export interface WorkItem {
   closedAt?: string | null;
   createdAt: string;
   createdByName?: string | null;
+  updatedAt?: string;
+  updatedByName?: string | null;
   /** Present on tree responses — totals rolled up from all descendants. */
   rollup?: { total: number; closed: number; progress: number; estimated: number; remaining: number; completed: number; points: number };
   children?: WorkItem[];
+}
+
+/** What a member may do inside a team — granted by the team's manager. */
+export type TeamAccessLevel = 'read' | 'contribute' | 'manage';
+
+export const ACCESS_META: Record<TeamAccessLevel, { label: string; blurb: string; fg: string; bg: string }> = {
+  read:       { label: 'Read',       blurb: 'View the board and reports only',            fg: T.sub,          bg: '#F3F4F6' },
+  contribute: { label: 'Contribute', blurb: 'Create and update work items, log time',      fg: T.blue.fg,      bg: T.blue.bg },
+  manage:     { label: 'Manage',     blurb: 'Everything, plus the roster and sprints',     fg: T.purple.fg,    bg: T.purple.bg },
+};
+
+export const ACCESS_ORDER: TeamAccessLevel[] = ['read', 'contribute', 'manage'];
+
+/** One entry in a work item's or project's audit trail. */
+export interface ActivityEntry {
+  id: string;
+  projectId: string;
+  entityType: 'project' | 'team' | 'sprint' | 'work_item';
+  entityId: string;
+  entityTitle?: string | null;
+  action: string;
+  actorName?: string | null;
+  changes?: { field: string; from?: string | null; to?: string | null }[] | null;
+  summary?: string | null;
+  createdAt: string;
+}
+
+/** Icon + tint per audit action, so the history feed scans quickly. */
+export const ACTION_META: Record<string, { icon: string; fg: string; bg: string }> = {
+  created:        { icon: '✚', fg: T.green.fg,  bg: T.green.bg },
+  updated:        { icon: '✎', fg: T.blue.fg,   bg: T.blue.bg },
+  state_changed:  { icon: '⇄', fg: T.purple.fg, bg: T.purple.bg },
+  assigned:       { icon: '👤', fg: T.blue.fg,   bg: T.blue.bg },
+  unassigned:     { icon: '👤', fg: T.sub,       bg: '#F3F4F6' },
+  deleted:        { icon: '🗑', fg: T.red.fg,    bg: T.red.bg },
+  work_logged:    { icon: '⏱', fg: T.amber.fg,  bg: T.amber.bg },
+  member_added:   { icon: '＋', fg: T.green.fg,  bg: T.green.bg },
+  member_removed: { icon: '－', fg: T.red.fg,    bg: T.red.bg },
+  access_changed: { icon: '🔑', fg: T.purple.fg, bg: T.purple.bg },
+  sprint_changed: { icon: '⟳', fg: T.blue.fg,   bg: T.blue.bg },
+};
+
+/** "3 minutes ago" style stamp used across the board screens. */
+export function timeAgo(iso?: string | null): string {
+  if (!iso) return '';
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return days < 30 ? `${days}d ago` : new Date(iso).toLocaleDateString();
 }
 
 export interface ProjectSummary {

@@ -7,6 +7,13 @@ import { ConfigService } from '@nestjs/config';
  * or a dropped Supabase connection taking the process down. These options bound
  * the pool, fail fast instead of hanging, and auto-recover from transient drops.
  */
+/** Pull `?schema=x` out of a connection string; undefined means the default. */
+export function schemaFromUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  const m = /[?&]schema=([^&]+)/.exec(url);
+  return m ? decodeURIComponent(m[1]) : undefined;
+}
+
 export const getDatabaseConfig = (config: ConfigService): TypeOrmModuleOptions => {
   const isProd = config.get('NODE_ENV') === 'production';
 
@@ -51,7 +58,16 @@ export const getDatabaseConfig = (config: ConfigService): TypeOrmModuleOptions =
     return {
       ...base,
       url,
+      // TypeORM does NOT read `?schema=` from the connection string — without
+      // this the tables would silently be created in `public` instead.
+      schema: config.get<string>('DB_SCHEMA') || schemaFromUrl(url),
       ssl: { rejectUnauthorized: false },
+      extra: {
+        ...(base.extra as Record<string, unknown>),
+        // Supabase's transaction pooler (port 6543) does not support the
+        // prepared statements node-postgres would otherwise use.
+        ...(url.includes('pgbouncer=true') ? { statement_timeout: undefined, max: Math.min(poolMax, 10) } : {}),
+      },
     };
   }
 

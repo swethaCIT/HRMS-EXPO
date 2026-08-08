@@ -14,6 +14,9 @@ const PAGE_LIMIT = 20;
 export default function ParticipantPickerScreen({ route, navigation }: any) {
   const startDateTime: string | undefined = route?.params?.startDateTime;
   const endDateTime: string | undefined = route?.params?.endDateTime;
+  // Set only when editing an existing meeting, so its own participants
+  // aren't flagged "Busy" against the very slot they're already booked into.
+  const excludeEventId: string | undefined = route?.params?.excludeEventId;
 
   const dispatch = useDispatch<AppDispatch>();
   const picker = useSelector((s: RootState) => s.calendar.picker);
@@ -27,14 +30,14 @@ export default function ParticipantPickerScreen({ route, navigation }: any) {
 
   useEffect(() => {
     dispatch(setSearchQuery(debouncedQuery));
-    dispatch(searchParticipants({ q: debouncedQuery, start: startDateTime, end: endDateTime, page: 1, limit: PAGE_LIMIT }));
+    dispatch(searchParticipants({ q: debouncedQuery, start: startDateTime, end: endDateTime, page: 1, limit: PAGE_LIMIT, excludeEventId }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQuery, startDateTime, endDateTime]);
+  }, [debouncedQuery, startDateTime, endDateTime, excludeEventId]);
 
   const loadMore = () => {
     if (picker.loading) return;
     if (picker.searchResults.length >= picker.total) return;
-    dispatch(searchParticipants({ q: debouncedQuery, start: startDateTime, end: endDateTime, page: picker.page + 1, limit: PAGE_LIMIT }));
+    dispatch(searchParticipants({ q: debouncedQuery, start: startDateTime, end: endDateTime, page: picker.page + 1, limit: PAGE_LIMIT, excludeEventId }));
   };
 
   const selectedIds = new Set(picker.selectedParticipants.map((p) => p.employeeId));

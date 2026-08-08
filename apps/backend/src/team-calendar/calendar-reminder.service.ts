@@ -11,7 +11,7 @@ import {
   EventParticipant,
   ResponseStatus,
 } from './entities/event-participant.entity';
-import { expandOccurrences, Occurrence } from './calendar-recurrence.util';
+import { expandOccurrences, Occurrence, startOfDay } from './calendar-recurrence.util';
 import { EmployeesService } from '../employees/employees.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
@@ -59,8 +59,17 @@ export class CalendarReminderService {
               none: RecurrenceType.NONE,
               now,
             }).orWhere(
-              'e.recurrenceType != :none AND (e.recurrenceEndDate IS NULL OR e.recurrenceEndDate >= :now)',
-              { none: RecurrenceType.NONE, now },
+              'e.recurrenceType != :none AND (e.recurrenceEndDate IS NULL OR e.recurrenceEndDate >= :today)',
+              {
+                none: RecurrenceType.NONE,
+                // `recurrenceEndDate` is a plain `date` column (implicitly
+                // midnight). Comparing it against `now` (which carries a
+                // time-of-day) would drop the series from this scan the
+                // moment any time passes past midnight on its last day —
+                // silently skipping that final occurrence's reminder for
+                // nearly the whole day it's actually due. Compare date-to-date.
+                today: startOfDay(now),
+              },
             );
           }),
         )

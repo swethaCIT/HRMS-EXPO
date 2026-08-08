@@ -8,36 +8,54 @@ import { fetchNotifications, markReadLocal, markAllReadLocal } from '../../store
 import { managementKind } from '../../store/slices/authSlice';
 import { T } from '../../data/managerData';
 
-/** Where a notification takes you when tapped, based on type + the user's role. */
-function targetRoute(type: string, kind: 'admin' | 'hr' | 'manager' | null): string | null {
+const CALENDAR_TYPES = new Set(['calendar_invite', 'calendar_update', 'calendar_cancel', 'calendar_reminder']);
+
+/**
+ * Where a notification takes you when tapped, based on type + the user's role.
+ * Most types route to a category screen (matching how every list in the app
+ * already works — Tickets, Payroll, Leave); calendar_* is the one case with a
+ * specific record to jump to, since the notification carries its `eventId`.
+ */
+function targetRoute(n: { type: string; eventId?: string | null }, kind: 'admin' | 'hr' | 'manager' | null): { route: string; params?: any } | null {
+  if (CALENDAR_TYPES.has(n.type)) {
+    return n.eventId ? { route: 'MeetingDetail', params: { eventId: n.eventId } } : { route: 'TeamCalendar' };
+  }
+  if (n.type === 'work_item') return { route: 'MyWorkItems' };
+
+  const type = n.type;
   if (kind === 'manager') {
-    if (type === 'leave' || type === 'approval' || type === 'ticket') return 'Approvals';
-    if (type === 'payroll') return 'Payroll';
+    if (type === 'leave' || type === 'approval' || type === 'ticket') return { route: 'Approvals' };
+    if (type === 'payroll') return { route: 'Payroll' };
     return null;
   }
   if (kind === 'hr') {
-    if (type === 'leave' || type === 'approval' || type === 'document') return 'Requests';
-    if (type === 'payroll') return 'Payroll';
+    if (type === 'leave' || type === 'approval' || type === 'document') return { route: 'Requests' };
+    if (type === 'payroll') return { route: 'Payroll' };
     return null;
   }
   if (kind === 'admin') {
-    if (type === 'system' || type === 'approval') return 'Users';
+    if (type === 'system' || type === 'approval') return { route: 'Users' };
     return null;
   }
   // employee
-  if (type === 'ticket') return 'Tickets';
-  if (type === 'payroll') return 'Payroll';
-  if (type === 'leave') return 'Leave';
+  if (type === 'ticket') return { route: 'Tickets' };
+  if (type === 'payroll') return { route: 'Payroll' };
+  if (type === 'leave') return { route: 'Leave' };
   return null;
 }
 
 const TYPE_META: Record<string, { icon: string; bg: string }> = {
-  info:     { icon: 'ℹ️', bg: '#EFF6FF' },
-  approval: { icon: '✅', bg: '#ECFDF5' },
-  leave:    { icon: '🏖️', bg: '#FEF3C7' },
-  payroll:  { icon: '💳', bg: '#EDE9FE' },
-  ticket:   { icon: '🎫', bg: '#DBEAFE' },
-  system:   { icon: '⚙️', bg: '#F3F4F6' },
+  info:              { icon: 'ℹ️', bg: '#EFF6FF' },
+  approval:          { icon: '✅', bg: '#ECFDF5' },
+  leave:             { icon: '🏖️', bg: '#FEF3C7' },
+  payroll:           { icon: '💳', bg: '#EDE9FE' },
+  ticket:            { icon: '🎫', bg: '#DBEAFE' },
+  system:            { icon: '⚙️', bg: '#F3F4F6' },
+  work_item:         { icon: '📋', bg: '#EEF2FF' },
+  calendar_invite:   { icon: '🗓️', bg: '#EEF2FF' },
+  calendar_update:   { icon: '🗓️', bg: '#EEF2FF' },
+  calendar_cancel:   { icon: '🗓️', bg: '#FEE2E2' },
+  calendar_reminder: { icon: '⏰', bg: '#FEF3C7' },
 };
 
 function timeAgo(iso: string): string {
@@ -59,10 +77,10 @@ export default function NotificationsScreen({ navigation }: any) {
 
   useEffect(() => { dispatch(fetchNotifications()); }, [dispatch]);
 
-  const onTapNotification = (n: { id: string; type: string }) => {
+  const onTapNotification = (n: { id: string; type: string; eventId?: string | null }) => {
     dispatch(markReadLocal(n.id));
-    const route = targetRoute(n.type, managementKind(role));
-    if (route) { try { navigation?.navigate(route); } catch { /* route not in this stack */ } }
+    const target = targetRoute(n, managementKind(role));
+    if (target) { try { navigation?.navigate(target.route, target.params); } catch { /* route not in this stack */ } }
   };
 
   return (
