@@ -91,15 +91,8 @@ const CURRENT: PaySlip = {
   attendance: { totalDays: 30, paidDays: 30, present: 22, paidLeaves: 0, lop: 0, weekOffs: 8 },
 };
 
-/* salary history (net pay per month) */
-const HISTORY = [
-  { month: 5, year: 2026, net: 88350, status: 'Paid' as const },
-  { month: 4, year: 2026, net: 86950, status: 'Paid' as const },
-  { month: 3, year: 2026, net: 88350, status: 'Paid' as const },
-  { month: 2, year: 2026, net: 85200, status: 'Paid' as const },
-  { month: 1, year: 2026, net: 88350, status: 'Paid' as const },
-  { month: 0, year: 2026, net: 87600, status: 'Paid' as const },
-];
+/** Salary history row (net pay per month), built from the employee's own payslips. */
+interface HistoryRow { month: number; year: number; net: number; status: 'Paid' | 'Processing' }
 
 const NOT_ON_FILE = 'Not on file';
 
@@ -117,6 +110,7 @@ export default function PayrollScreen({ navigation }: any) {
   const [picker, setPicker]     = useState<null | 'month' | 'year'>(null);
   const [slip, setSlip]         = useState<PaySlip>(CURRENT);
   const [offline, setOffline]   = useState(false);
+  const [history, setHistory]   = useState<HistoryRow[]>([]);
 
   /**
    * Identity and bank rows come from the signed-in user's own employee record.
@@ -144,8 +138,19 @@ export default function PayrollScreen({ navigation }: any) {
     (async () => {
       try {
         const { data } = await payrollApi.getByEmployee(employee.id);
-        const p = Array.isArray(data) ? data[0] : data;
+        const rows = Array.isArray(data) ? data : data ? [data] : [];
+        const p = rows[0];
         setOffline(false);
+        // Real salary history for THIS employee, newest first. It was previously
+        // six hardcoded months of ~₹88k shown to everyone regardless of their pay.
+        setHistory(
+          rows.map((r: any) => ({
+            month: (Number(r.month) || 1) - 1,
+            year: Number(r.year) || new Date().getFullYear(),
+            net: Number(r.netSalary) || 0,
+            status: r.status === 'paid' ? ('Paid' as const) : ('Processing' as const),
+          })),
+        );
         if (p) {
           const n = (v: any) => Number(v) || 0;
           setSlip({
@@ -396,7 +401,12 @@ export default function PayrollScreen({ navigation }: any) {
         {/* ── Salary history ── */}
         <View style={s.card}>
           <Text style={s.cardTitle}>SALARY HISTORY</Text>
-          {HISTORY.map(h => (
+          {history.length === 0 && (
+            <Text style={s.kvNote}>
+              {offline ? 'Could not load your payslip history.' : 'No earlier payslips on record yet.'}
+            </Text>
+          )}
+          {history.map(h => (
             <TouchableOpacity
               key={`${h.month}-${h.year}`}
               style={s.histRow}

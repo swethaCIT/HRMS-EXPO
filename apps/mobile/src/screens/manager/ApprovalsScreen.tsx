@@ -1,11 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, LayoutAnimation, Platform, UIManager,
   RefreshControl, Modal, TextInput,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
-import { approve, reject, approveAllPending, fetchApprovals } from '../../store/slices/approvalsSlice';
+import { decideApproval, approveAllPending, fetchApprovals, clearActionError } from '../../store/slices/approvalsSlice';
 import { useLivePolling } from '../../utils/useLivePolling';
 import {
   T, KIND_META, TINT, ApprovalStatus, initialsOf, avatarColor,
@@ -26,6 +26,7 @@ export default function ApprovalsScreen({ navigation }: any) {
   const dispatch = useDispatch<AppDispatch>();
   const items = useSelector((s: RootState) => s.approvals.items);
   const offline = useSelector((s: RootState) => s.approvals.offline);
+  const actionError = useSelector((s: RootState) => s.approvals.actionError);
   const [tab, setTab] = useState<Tab>('pending');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -52,7 +53,7 @@ export default function ApprovalsScreen({ navigation }: any) {
 
   const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
-  const onApprove = (id: string) => { animate(); dispatch(approve(id)); };
+  const onApprove = (id: string) => { animate(); dispatch(decideApproval({ id, decision: 'approve' })); };
   const onReject = (id: string) => { setRejectReason(''); setRejecting(id); };
   const confirmReject = () => {
     if (!rejecting) return;
@@ -60,7 +61,7 @@ export default function ApprovalsScreen({ navigation }: any) {
     const reason = rejectReason.trim();
     setRejecting(null);
     animate();
-    dispatch(reject({ id, reason: reason || undefined }));
+    dispatch(decideApproval({ id, decision: 'reject', reason: reason || undefined }));
   };
   const onApproveAll = () => {
     if (!counts.pending) return;
@@ -69,6 +70,12 @@ export default function ApprovalsScreen({ navigation }: any) {
       { text: 'Approve all', onPress: () => { animate(); dispatch(approveAllPending()); } },
     ]);
   };
+
+  // Surface a failed decision — the item has already reverted to pending.
+  useEffect(() => {
+    if (!actionError) return;
+    Alert.alert('Not saved', actionError, [{ text: 'OK', onPress: () => dispatch(clearActionError()) }]);
+  }, [actionError, dispatch]);
 
   return (
     <View style={st.root}>

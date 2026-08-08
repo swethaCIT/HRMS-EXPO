@@ -1,11 +1,14 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { ApprovalItem } from '../../data/managerData';
 import { leaveApi, leaveApprovalApi, ticketApi, employeeApi, regularizationApi } from '../../services/api';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 interface ApprovalsState {
   items: ApprovalItem[];
   loading: boolean;
   offline: boolean;
+  /** Set when a decision failed to reach the server, so the UI can say so. */
+  actionError: string | null;
 }
 
 // Start empty — the inbox is populated purely from real backend leaves + tickets,
@@ -14,6 +17,7 @@ const initialState: ApprovalsState = {
   items: [],
   loading: false,
   offline: false,
+  actionError: null,
 };
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
@@ -148,33 +152,16 @@ const approvalsSlice = createSlice({
   reducers: {
     /** Wipe on sign-out so the next user never inherits these approvals. */
     resetApprovals: () => initialState,
-    approve: (state, action: PayloadAction<string>) => {
-      const it = state.items.find((i) => i.id === action.payload);
+    clearActionError: (state) => { state.actionError = null; },
+    /** Local-only status flip. Applied optimistically, reverted if the API call fails. */
+    setStatusLocal: (
+      state,
+      action: PayloadAction<{ id: string; status: ApprovalItem['status']; reason?: string }>,
+    ) => {
+      const it = state.items.find((i) => i.id === action.payload.id);
       if (!it) return;
-      it.status = 'approved';
-      if (it.leaveId) leaveApprovalApi.approve(it.leaveId).catch(() => {});
-      if (it.ticketId) ticketApi.approve(it.ticketId).catch(() => {});
-      if (it.regularizationId) regularizationApi.approve(it.regularizationId).catch(() => {});
-    },
-    reject: (state, action: PayloadAction<string | { id: string; reason?: string }>) => {
-      const id = typeof action.payload === 'string' ? action.payload : action.payload.id;
-      const reason = typeof action.payload === 'string' ? undefined : action.payload.reason;
-      const it = state.items.find((i) => i.id === id);
-      if (!it) return;
-      it.status = 'rejected';
-      if (it.reason == null && reason) it.reason = reason;
-      if (it.leaveId) leaveApprovalApi.reject(it.leaveId, reason).catch(() => {});
-      if (it.ticketId) ticketApi.reject(it.ticketId).catch(() => {});
-      if (it.regularizationId) regularizationApi.reject(it.regularizationId, reason).catch(() => {});
-    },
-    approveAllPending: (state) => {
-      state.items.forEach((i) => {
-        if (i.status !== 'pending') return;
-        i.status = 'approved';
-        if (i.leaveId) leaveApprovalApi.approve(i.leaveId).catch(() => {});
-        if (i.ticketId) ticketApi.approve(i.ticketId).catch(() => {});
-        if (i.regularizationId) regularizationApi.approve(i.regularizationId).catch(() => {});
-      });
+      it.status = action.payload.status;
+      if (it.reason == null && action.payload.reason) it.reason = action.payload.reason;
     },
   },
   extraReducers: (builder) => {
@@ -187,9 +174,84 @@ const approvalsSlice = createSlice({
           state.offline = action.payload.offline;
         }
       })
-      .addCase(fetchApprovals.rejected, (state) => { state.loading = false; state.offline = true; });
+      .addCase(fetchApprovals.rejected, (state) => { state.loading = false; state.offline = true; })
+      // A failed decision has already been reverted by the thunk; record why so
+      // the screen can tell the manager instead of silently doing nothing.
+      .addCase(decideApproval.rejected, (state, action) => {
+        state.actionError = (action.payload as string) ?? 'Could not save that decision.';
+      })
+      .addCase(decideApproval.fulfilled, (state) => { state.actionError = null; })
+      .addCase(approveAllPending.fulfilled, (state, action) => {
+        const { failed, attempted } = action.payload;
+        state.actionError = failed
+          ? `${attempted - failed} of ${attempted} approved. ${failed} could not be saved — pull to refresh and retry.`
+          : null;
+      });
   },
 });
 
-export const { approve, reject, approveAllPending, resetApprovals } = approvalsSlice.actions;
+export const { resetApprovals, clearActionError, setStatusLocal } = approvalsSlice.actions;
+
+/** Call the right endpoint for whichever record backs this inbox item. */
+async function sendDecision(it: ApprovalItem, decision: 'approve' | 'reject', reason?: string) {
+  if (it.leaveId) {
+    return decision === 'approve' ? leaveApprovalApi.approve(it.leaveId) : leaveApprovalApi.reject(it.leaveId, reason);
+  }
+  if (it.ticketId) {
+    return decision === 'approve' ? ticketApi.approve(it.ticketId) : ticketApi.reject(it.ticketId);
+  }
+  if (it.regularizationId) {
+    return decision === 'approve'
+      ? regularizationApi.approve(it.regularizationId)
+      : regularizationApi.reject(it.regularizationId, reason);
+  }
+  // Demo-only rows have no backing record; nothing to send.
+  return null;
+}
+
+/**
+ * Approve or reject, and only keep the change if the server accepted it.
+ *
+ * These used to run inside a reducer with `.catch(() => {})`: the row flipped to
+ * approved, the badge count dropped, and a 401/403 was discarded — so a manager
+ * could "Approve All" against an expired session, see an empty inbox, and have
+ * changed nothing at all. The item now reverts and the error surfaces.
+ */
+export const decideApproval = createAsyncThunk(
+  'approvals/decide',
+  async (
+    { id, decision, reason }: { id: string; decision: 'approve' | 'reject'; reason?: string },
+    { getState, dispatch, rejectWithValue },
+  ) => {
+    const state = getState() as { approvals: ApprovalsState };
+    const item = state.approvals.items.find((i) => i.id === id);
+    if (!item) return rejectWithValue('That request is no longer in the inbox.');
+
+    const previous = item.status;
+    const target: ApprovalItem['status'] = decision === 'approve' ? 'approved' : 'rejected';
+    dispatch(setStatusLocal({ id, status: target, reason }));
+
+    try {
+      await sendDecision(item, decision, reason);
+      return { id, status: target };
+    } catch (err) {
+      dispatch(setStatusLocal({ id, status: previous }));
+      return rejectWithValue(getErrorMessage(err, `Could not ${decision} this request.`));
+    }
+  },
+);
+
+/** Approve every pending item, reporting exactly how many actually succeeded. */
+export const approveAllPending = createAsyncThunk(
+  'approvals/approveAll',
+  async (_: void, { getState, dispatch }) => {
+    const state = getState() as { approvals: ApprovalsState };
+    const pending = state.approvals.items.filter((i) => i.status === 'pending');
+    const results = await Promise.allSettled(
+      pending.map((i) => dispatch(decideApproval({ id: i.id, decision: 'approve' })).unwrap()),
+    );
+    const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+    return { attempted: pending.length, succeeded, failed: pending.length - succeeded };
+  },
+);
 export default approvalsSlice.reducer;

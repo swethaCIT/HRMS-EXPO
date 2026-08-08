@@ -55,7 +55,11 @@ const hrRequestsSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder.addCase(fetchHRRequests.fulfilled, (state, action) => {
-      if (action.payload && action.payload.length) state.items = action.payload;
+      // Accept an empty array: "no pending requests" is a real, correct answer.
+      // Guarding on `.length` meant a healthy backend with an empty queue left
+      // the seed data in place, so HR saw fabricated requests with live
+      // Issue/Reject buttons and a red badge counting them.
+      if (Array.isArray(action.payload)) state.items = action.payload;
     });
   },
 });

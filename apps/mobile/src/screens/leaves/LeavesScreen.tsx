@@ -7,6 +7,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import { leaveApi } from '../../services/api';
 import { useLivePolling } from '../../utils/useLivePolling';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 const { width } = Dimensions.get('window');
 
@@ -122,6 +123,7 @@ export default function LeavesScreen({ navigation }: any) {
   const [showPicker, setShowPicker]   = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [myLeaves, setMyLeaves]       = useState<MyLeave[]>([]);
+  const [submitting, setSubmitting]   = useState(false);
 
   /* fetch this employee's leave requests on mount / when the profile loads */
   const loadLeaves = React.useCallback(async () => {
@@ -155,22 +157,40 @@ export default function LeavesScreen({ navigation }: any) {
     }
   }
 
-  /* submit — creates a real leave request when we have the employee profile */
+  /**
+   * Submit the request. The success card is shown ONLY when the server actually
+   * accepted it — previously it was shown unconditionally, so a failed POST (or
+   * a session with no employee profile, where nothing was sent at all) still
+   * displayed a green "Leave Request Submitted", and the employee stopped
+   * chasing a request that did not exist.
+   */
   async function handleSubmit() {
     if (!fromDate || !toDate || !reason.trim()) return;
-    if (employee?.id) {
-      try {
-        await leaveApi.create({
-          employeeId: employee.id,
-          type: TYPE_MAP[leaveType] ?? 'annual',
-          startDate: dateKey(fromDate),
-          endDate: dateKey(toDate),
-          reason,
-        });
-        await loadLeaves(); // refresh "My Leave Requests" with the new row
-      } catch { /* offline: still show the confirmation */ }
+
+    if (!employee?.id) {
+      Alert.alert(
+        'Cannot submit',
+        'Your employee profile has not loaded, so this request cannot be filed. Please sign in again and retry.',
+      );
+      return;
     }
-    setShowSummary(true);
+
+    setSubmitting(true);
+    try {
+      await leaveApi.create({
+        employeeId: employee.id,
+        type: TYPE_MAP[leaveType] ?? 'annual',
+        startDate: dateKey(fromDate),
+        endDate: dateKey(toDate),
+        reason,
+      });
+      await loadLeaves(); // refresh "My Leave Requests" with the new row
+      setShowSummary(true);
+    } catch (err) {
+      Alert.alert('Could not submit leave', getErrorMessage(err, 'Please check your connection and try again.'));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   /* employee self-service: withdraw a still-pending request */
@@ -379,11 +399,13 @@ export default function LeavesScreen({ navigation }: any) {
 
           {/* Submit */}
           <TouchableOpacity
-            style={[s.submitBtn, (!fromDate || !toDate || !reason.trim()) && s.submitBtnDisabled]}
+            style={[s.submitBtn, (!fromDate || !toDate || !reason.trim() || submitting) && s.submitBtnDisabled]}
             onPress={handleSubmit}
+            // Guard against a double-tap filing the same leave twice.
+            disabled={submitting || !fromDate || !toDate || !reason.trim()}
             activeOpacity={0.85}
           >
-            <Text style={s.submitText}>Submit Leave Request</Text>
+            <Text style={s.submitText}>{submitting ? 'Submitting…' : 'Submit Leave Request'}</Text>
           </TouchableOpacity>
         </View>
 

@@ -32,7 +32,32 @@ const ringSt = StyleSheet.create({
 export default function TeamMemberDetailScreen({ route, navigation }: any) {
   // Accept either a full member object (People / Team) or an id to look up.
   const id = route?.params?.id;
-  const m: TeamMember = route?.params?.member ?? TEAM.find((x) => x.id === id) ?? TEAM[0];
+  // No `?? TEAM[0]` fallback: navigating with an unknown id used to render a
+  // mock person as though they were real, so you could hold a review
+  // conversation about someone else's numbers. Show an honest empty state.
+  const m: TeamMember | undefined = route?.params?.member ?? TEAM.find((x) => x.id === id);
+
+  if (!m) {
+    return (
+      <View style={st.root}>
+        <StatusBar barStyle="light-content" backgroundColor={T.header} />
+        <View style={st.header}>
+          <TouchableOpacity onPress={() => navigation?.goBack?.()} style={st.back}>
+            <Text style={st.backTx}>‹</Text>
+          </TouchableOpacity>
+          <Text style={st.hTitle}>Team member</Text>
+        </View>
+        <View style={st.notFound}>
+          <Text style={{ fontSize: 40 }}>🔍</Text>
+          <Text style={st.notFoundTx}>That team member could not be found.</Text>
+          <TouchableOpacity style={st.notFoundBtn} onPress={() => navigation?.goBack?.()}>
+            <Text style={st.notFoundBtnTx}>Go back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   const pm = PRESENCE_META[m.presence];
 
   return (
@@ -137,6 +162,12 @@ const st = StyleSheet.create({
   header: { backgroundColor: T.header, paddingTop: 48, paddingBottom: 20, paddingHorizontal: 20 },
   back: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
   backTx: { color: '#FFF', fontSize: 26, fontWeight: '700', marginTop: -4 },
+  hTitle: { color: '#FFF', fontSize: 18, fontWeight: '700', marginTop: 10 },
+
+  notFound: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
+  notFoundTx: { fontSize: 14, color: T.sub, textAlign: 'center' },
+  notFoundBtn: { backgroundColor: T.primary, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 10, marginTop: 4 },
+  notFoundBtnTx: { color: '#FFF', fontWeight: '700', fontSize: 13 },
 
   profile: { alignItems: 'center', marginTop: 4 },
   avatar: { width: 76, height: 76, borderRadius: 38, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: 'rgba(255,255,255,0.25)' },

@@ -78,7 +78,10 @@ export default function PeopleScreen({ navigation }: any) {
         p.employeeId.toLowerCase().includes(q.toLowerCase());
       return matchDept && matchQ;
     });
-  }, [q, dept]);
+    // `people` MUST be a dependency: without it the memo never recomputed after
+    // the API replaced the seed list, so the header read "40 employees · live"
+    // while the list below still showed the mock people until you typed.
+  }, [people, q, dept]);
 
   return (
     <View style={st.root}>

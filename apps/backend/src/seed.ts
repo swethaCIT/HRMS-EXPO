@@ -32,6 +32,12 @@ import { ProjectTeam, ProjectTeamMember } from './projects/entities/project-team
 import { Sprint, SprintStatus } from './projects/entities/sprint.entity';
 import { WorkItem, WorkItemState, WorkItemType } from './projects/entities/work-item.entity';
 import { WorkLog } from './projects/entities/work-log.entity';
+import { ProjectActivity } from './projects/entities/project-activity.entity';
+import { Document } from './documents/entities/document.entity';
+import { Regularization } from './regularizations/entities/regularization.entity';
+import { OnboardingInvite } from './onboarding/entities/onboarding-invite.entity';
+import { CalendarEvent } from './team-calendar/entities/calendar-event.entity';
+import { EventParticipant } from './team-calendar/entities/event-participant.entity';
 
 dotenv.config();
 
@@ -91,9 +97,16 @@ async function main() {
   // Mirrors config/database.config.ts: DATABASE_URL (hosted, e.g. Supabase) if
   // set, otherwise fall back to the local Docker Postgres discrete DB_* vars.
   const url = process.env.DATABASE_URL;
+  // EVERY entity must be listed: this DataSource runs with `synchronize: true`
+  // and is in practice the only thing that creates the schema, so anything
+  // omitted here simply never gets a table. `documents`, `regularizations` and
+  // `onboarding_invites` were missing, which silently broke those three modules
+  // on any database not built by the dev server's own auto-sync.
   const entities = [
     User, Employee, Attendance, Leave, Payroll, Notification, Ticket, Asset, Request, Holiday, Announcement,
-    Project, ProjectTeam, ProjectTeamMember, Sprint, WorkItem, WorkLog,
+    Document, Regularization, OnboardingInvite,
+    Project, ProjectTeam, ProjectTeamMember, Sprint, WorkItem, WorkLog, ProjectActivity,
+    CalendarEvent, EventParticipant,
   ];
 
   const ds = url
