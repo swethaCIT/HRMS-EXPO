@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import { randomInt } from 'crypto';
 import { OnboardingInvite } from './entities/onboarding-invite.entity';
 import { User, UserRole } from '../users/entities/user.entity';
 import { Employee, EmploymentType, EmploymentStatus } from '../employees/entities/employee.entity';
@@ -22,8 +23,18 @@ export class OnboardingService {
     private readonly config: ConfigService,
   ) {}
 
-  private otp() { return String(Math.floor(100000 + Math.random() * 900000)); }
-  private isDev() { return this.config.get('NODE_ENV') !== 'production'; }
+  /**
+   * The invite code is a credential — it lets a stranger create a real,
+   * provisioned account. Math.random is not cryptographic and its state is
+   * recoverable from observed outputs, so an attacker who can see any codes
+   * could predict the next one.
+   */
+  private otp() { return String(randomInt(100000, 1000000)); }
+
+  /** Returning the code in the HTTP response needs an explicit opt-in, not just a missing NODE_ENV. */
+  private isDev() {
+    return this.config.get('NODE_ENV') !== 'production' && this.config.get('EXPOSE_DEV_OTP') === 'true';
+  }
 
   /** HR sends an onboarding invite to a candidate's personal email. */
   async invite(dto: { personalEmail: string; firstName?: string; lastName?: string; department?: string; designation?: string }, hrId: string) {
@@ -32,7 +43,7 @@ export class OnboardingService {
 
     const code = this.otp();
     const invite = await this.inviteRepo.save(this.inviteRepo.create({
-      tempEmployeeId: 'ONB-' + Math.floor(1000 + Math.random() * 9000),
+      tempEmployeeId: 'ONB-' + randomInt(1000, 10000),
       personalEmail: dto.personalEmail,
       tokenHash: await bcrypt.hash(code, 10),
       firstName: dto.firstName,

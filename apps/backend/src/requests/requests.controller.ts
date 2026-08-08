@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Param, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { RequestsService } from './requests.service';
+import { CreateRequestDto } from './dto/create-request.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -14,7 +15,10 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 export class RequestsController {
   constructor(private readonly requestsService: RequestsService) {}
 
+  /** The HR inbox. Employees use `/mine` — these contain other people's
+   *  document requests, salary certificates and profile changes. */
   @Get()
+  @Roles(UserRole.HR, UserRole.ADMIN)
   findAll() {
     return this.requestsService.findAll();
   }
@@ -25,8 +29,8 @@ export class RequestsController {
   }
 
   @Post()
-  create(@Body() body: any, @CurrentUser('id') userId: string) {
-    return this.requestsService.create(body, userId);
+  create(@Body() dto: CreateRequestDto, @CurrentUser('id') userId: string) {
+    return this.requestsService.create(dto, userId);
   }
 
   @Patch(':id/issue')

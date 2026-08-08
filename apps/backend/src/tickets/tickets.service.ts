@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -139,9 +139,18 @@ export class TicketsService {
     }
   }
 
-  async cancel(id: string): Promise<Ticket> {
+  /**
+   * Withdraw a ticket. `actor` is checked against the raiser unless they are
+   * manager/HR/Admin — otherwise any employee could close a colleague's open
+   * ticket just by knowing its id.
+   */
+  async cancel(id: string, actor?: { id: string; role?: string }): Promise<Ticket> {
     const ticket = await this.ticketRepo.findOne({ where: { id } });
     if (!ticket) throw new NotFoundException('Ticket not found');
+    const privileged = !!actor?.role && ['admin', 'hr', 'manager'].includes(actor.role);
+    if (!privileged && ticket.createdById !== actor?.id) {
+      throw new ForbiddenException('You can only cancel a ticket you raised.');
+    }
     ticket.status = 'Cancelled';
     const saved = await this.ticketRepo.save(ticket);
     if (ticket.createdById) await this.cache.del(this.mineKey(ticket.createdById));
