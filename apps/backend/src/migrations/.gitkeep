@@ -1,0 +1,2 @@
+Generated TypeORM migrations live here.
+Create one with: npm run migration:generate -- src/migrations/DescribeTheChange
