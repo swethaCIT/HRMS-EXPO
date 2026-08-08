@@ -42,6 +42,24 @@ export class EmployeesService {
     return rows;
   }
 
+  /**
+   * Resolve many employees in ONE query, keyed by id.
+   *
+   * The calendar previously called `findOne` per participant: rendering a
+   * 50-person meeting cost ~51 round trips on a screen that polls every 20s,
+   * and the per-minute reminder cron did events x participants lookups on every
+   * tick against a 20-connection pool.
+   */
+  async findManyByIds(ids: string[]): Promise<Map<string, Employee>> {
+    const unique = [...new Set(ids.filter(Boolean))];
+    if (!unique.length) return new Map();
+    const rows = await this.employeeRepo.find({
+      where: { id: In(unique) },
+      relations: { user: true },
+    });
+    return new Map(rows.map((e) => [e.id, e]));
+  }
+
   async findOne(id: string): Promise<Employee> {
     const employee = await this.employeeRepo.findOne({
       where: { id },

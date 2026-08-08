@@ -36,12 +36,18 @@ services:
 
   backend:
     build:
-      context: ./apps/backend
-      dockerfile: Dockerfile
+      # Repo root: npm workspaces hoists the only lockfile here, so building
+      # from ./apps/backend left `npm ci` with nothing to install from.
+      context: .
+      dockerfile: apps/backend/Dockerfile
     container_name: hrms_backend
     restart: unless-stopped
     env_file:
-      - ./apps/backend/.env
+      # .env is gitignored, so a fresh clone has no such file and compose used
+      # to abort with "env file not found". `required: false` lets the stack
+      # come up on the `environment:` defaults below instead.
+      - path: ./apps/backend/.env
+        required: false
     ports:
       - '3000:3000'
     depends_on:

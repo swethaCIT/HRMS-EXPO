@@ -29,6 +29,7 @@ import { AccessControlModule } from './common/access/access-control.module';
 import { HealthController } from './health/health.controller';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
 import { getDatabaseConfig } from './config/database.config';
+import { buildCacheOptions } from './config/redis.config';
 
 @Module({
   imports: [
@@ -44,9 +45,15 @@ import { getDatabaseConfig } from './config/database.config';
       inject: [ConfigService],
       useFactory: getDatabaseConfig,
     }),
-    // In-memory cache (fast, zero external deps). Redis was causing connection
-    // retry storms + slow/flaky startup when it wasn't running.
-    CacheModule.register({ isGlobal: true, ttl: 300_000 }),
+    // Redis when configured (REDIS_URL / CACHE_DRIVER=redis), in-memory
+    // otherwise. Shared cache matters once there is more than one replica —
+    // see buildCacheOptions. Never blocks startup if Redis is unreachable.
+    CacheModule.registerAsync({
+      isGlobal: true,
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: buildCacheOptions,
+    }),
     AccessControlModule,
     AuthModule,
     UsersModule,

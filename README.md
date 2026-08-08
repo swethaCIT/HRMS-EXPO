@@ -110,6 +110,32 @@ docker-compose down
 - **backend-ci.yml**: Lint → Test → Build → Docker push (on `main`)
 - **mobile-ci.yml**: TypeScript check → Test → Android APK (on `main`)
 
+## Database Migrations
+
+Development uses `synchronize: true`, so the schema follows the entities automatically.
+**Production sets `synchronize: false`** — the schema there is applied only by migrations.
+
+```bash
+cd apps/backend
+
+# After changing an entity, generate a migration from the diff (needs a DB to compare against)
+npm run migration:generate -- src/migrations/DescribeTheChange
+
+# Apply pending migrations (run this as part of every deploy, before the app starts)
+npm run migration:run
+
+# Inspect / undo
+npm run migration:show
+npm run migration:revert
+```
+
+DDL uses `DIRECT_URL` when set. On Supabase that must be the **session** pooler
+(port 5432) — the transaction pooler (6543) cannot reliably run schema changes.
+
+> `GET /health` returns **503** if the database is reachable but the schema is
+> missing, so a deploy that skipped `migration:run` fails its readiness probe
+> instead of silently accepting traffic and erroring on every request.
+
 ## Environment Variables
 
 See `.env.example` for all required variables. Key ones:

@@ -207,9 +207,9 @@ export class TeamCalendarService {
 
     // Enrich with display names/avatars so clients don't need a round-trip per
     // participant just to render a detail screen.
+    // One query for everyone, not one per participant.
     const employeeIds = Array.from(new Set([event.organizerId, ...participants.map((p) => p.employeeId)]));
-    const employees = await Promise.all(employeeIds.map((id) => this.employeesService.findOne(id).catch(() => null)));
-    const employeeById = new Map(employees.filter((e): e is NonNullable<typeof e> => !!e).map((e) => [e.id, e]));
+    const employeeById = await this.employeesService.findManyByIds(employeeIds);
     const nameOf = (id: string) => {
       const e = employeeById.get(id);
       return e ? `${e.firstName} ${e.lastName}`.trim() : undefined;

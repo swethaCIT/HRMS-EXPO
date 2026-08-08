@@ -167,6 +167,31 @@ export class WorkItemsService {
 
   /* ── Writes ── */
 
+  /** Highest existing number in the project, plus one. */
+  private async nextSeq(projectId: string): Promise<number> {
+    const last = await this.itemRepo.findOne({ where: { projectId }, order: { seq: 'DESC' } });
+    return (last?.seq ?? 0) + 1;
+  }
+
+  /**
+   * Save, re-numbering if another create claimed the same seq first. The unique
+   * (projectId, seq) constraint turns that race into a 23505 rather than two
+   * items sharing a display ref; a handful of retries settles it.
+   */
+  private async saveWithSeqRetry(item: WorkItem, attempts = 5): Promise<WorkItem> {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        return await this.itemRepo.save(item);
+      } catch (err: any) {
+        const isDuplicateSeq = err?.code === '23505' && String(err?.detail ?? err?.message).includes('seq');
+        if (!isDuplicateSeq || i === attempts - 1) throw err;
+        item.seq = await this.nextSeq(item.projectId);
+      }
+    }
+    // Unreachable: the loop either returns or rethrows.
+    throw new BadRequestException('Could not allocate a work item number — please retry.');
+  }
+
   async create(dto: CreateWorkItemDto, actor?: { id: string; name?: string }) {
     const project = await this.projectRepo.findOne({ where: { id: dto.projectId } });
     if (!project) throw new NotFoundException('Project not found');
@@ -184,12 +209,11 @@ export class WorkItemsService {
       }
     }
 
-    const last = await this.itemRepo.findOne({ where: { projectId: dto.projectId }, order: { seq: 'DESC' } });
     const estimate = dto.originalEstimate ?? 0;
 
     const item = this.itemRepo.create({
       ...dto,
-      seq: (last?.seq ?? 0) + 1,
+      seq: await this.nextSeq(dto.projectId),
       // Inherit the parent's sprint/team unless the caller pinned its own.
       sprintId: dto.sprintId ?? parent?.sprintId ?? undefined,
       teamId: dto.teamId ?? parent?.teamId ?? undefined,
@@ -206,7 +230,7 @@ export class WorkItemsService {
       activatedAt: (dto.state ?? WorkItemState.NEW) === WorkItemState.ACTIVE ? new Date() : undefined,
     });
 
-    const saved = await this.itemRepo.save(item);
+    const saved = await this.saveWithSeqRetry(item);
 
     await this.activity.record({
       projectId: saved.projectId,

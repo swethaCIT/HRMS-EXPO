@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index, Unique } from 'typeorm';
 
 /** Azure-style backlog hierarchy: Epic → Feature → User Story → Task / Bug. */
 export enum WorkItemType {
@@ -27,6 +27,14 @@ export const ALLOWED_CHILDREN: Record<WorkItemType, WorkItemType[]> = {
   [WorkItemType.BUG]: [WorkItemType.TASK],
 };
 
+/**
+ * The display number is unique per project at the database level. It is
+ * assigned by reading the current max and adding one, which two concurrent
+ * creates can both do; without this constraint they would both succeed and the
+ * board would show two different items both labelled "ATLAS-42". Now the loser
+ * gets a constraint violation and the service retries.
+ */
+@Unique('uq_work_item_project_seq', ['projectId', 'seq'])
 @Entity('work_items')
 export class WorkItem {
   @PrimaryGeneratedColumn('uuid')

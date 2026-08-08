@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import {
   CalendarEvent,
   EventStatus,
@@ -75,19 +75,24 @@ export class CalendarReminderService {
         )
         .getMany();
 
-      for (const event of events) {
-        const occurrences = expandOccurrences(event, now, windowEnd);
-        if (!occurrences.length) continue;
-        const occurrence = occurrences[0];
+      // Work out which events actually have an occurrence in the window first,
+      // then fetch all their participants and all those employees in two
+      // queries. This used to issue one employee lookup per participant per
+      // event on every single tick.
+      const due = events
+        .map((event) => ({ event, occurrence: expandOccurrences(event, now, windowEnd)[0] }))
+        .filter((x): x is { event: CalendarEvent; occurrence: Occurrence } => !!x.occurrence);
+      if (!due.length) return;
 
-        const participants = await this.participantRepo.find({
-          where: { eventId: event.eventId },
-        });
-        const eligible = participants.filter(
-          (p) => p.responseStatus !== ResponseStatus.DECLINED,
-        );
-        for (const participant of eligible) {
-          await this.sendReminderIfNeeded(event, occurrence, participant);
+      const participants = await this.participantRepo.find({
+        where: { eventId: In(due.map((d) => d.event.eventId)) },
+      });
+      const eligible = participants.filter((p) => p.responseStatus !== ResponseStatus.DECLINED);
+      const employeeById = await this.employeesService.findManyByIds(eligible.map((p) => p.employeeId));
+
+      for (const { event, occurrence } of due) {
+        for (const participant of eligible.filter((p) => p.eventId === event.eventId)) {
+          await this.sendReminderIfNeeded(event, occurrence, participant, employeeById.get(participant.employeeId));
         }
       }
     } catch (err: any) {
@@ -101,11 +106,9 @@ export class CalendarReminderService {
     event: CalendarEvent,
     occurrence: Occurrence,
     participant: EventParticipant,
+    employee?: { user?: { id?: string } } | null,
   ): Promise<void> {
     try {
-      const employee = await this.employeesService
-        .findOne(participant.employeeId)
-        .catch(() => null);
       const userId = employee?.user?.id;
       if (!userId) return;
 
