@@ -18,3 +18,6 @@ coverage/
 apps/mobile/*.png
 apps/mobile/*.xml
 *_log.txt
+
+# Corporate TLS-interception root CA — machine/network specific, not project config
+corporate-ca.pem

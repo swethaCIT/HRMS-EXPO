@@ -53,16 +53,54 @@ export class StorageService {
     return this.supabase;
   }
 
+  /**
+   * Upload and return the object's PATH inside the bucket — deliberately not a
+   * public URL.
+   *
+   * This used to return `getPublicUrl(...)`, which was then stored on the
+   * document row. In a public bucket that hands every employment contract,
+   * payslip and ID proof a permanent, unauthenticated link: anyone with the URL
+   * reads it, no login, forever. Callers now persist the path and mint a
+   * short-lived signed URL at read time (see `getSignedUrl`), so access stays
+   * tied to being logged in and expires on its own.
+   */
   async uploadFile(path: string, file: Buffer, mimeType: string): Promise<string> {
-    const supabase = this.client();
-    const { data, error } = await supabase.storage
-      .from(this.bucket)
+    const { data, error } = await this.client()
+      .storage.from(this.bucket)
       .upload(path, file, { contentType: mimeType, upsert: true });
 
-    if (error) throw new Error(`Upload failed: ${error.message}`);
+    if (error) throw this.describe(error, 'Upload');
+    return data.path;
+  }
 
-    const { data: urlData } = supabase.storage.from(this.bucket).getPublicUrl(data.path);
-    return urlData.publicUrl;
+  /**
+   * Turn a storage failure into something the caller can act on.
+   *
+   * supabase-js collapses every transport problem into the single string
+   * "fetch failed", which surfaced as an opaque 500. The most common causes are
+   * environmental, not code: a TLS-intercepting corporate proxy whose root CA
+   * Node doesn't trust, or a missing bucket. Name them.
+   */
+  private describe(error: { message?: string }, action: string): Error {
+    const raw = error?.message ?? 'unknown error';
+
+    if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|certificate|self.signed/i.test(raw)) {
+      this.logger.error(
+        `${action} could not reach Supabase Storage (${raw}). If this network intercepts TLS, ` +
+          'point NODE_EXTRA_CA_CERTS at the proxy root CA so Node trusts the chain.',
+      );
+      return new ServiceUnavailableException(
+        'Could not reach file storage. The server could not establish a secure connection to Supabase.',
+      );
+    }
+
+    if (/bucket not found|not found/i.test(raw)) {
+      this.logger.error(`${action} failed: bucket "${this.bucket}" not found`);
+      return new ServiceUnavailableException(`Storage bucket "${this.bucket}" does not exist.`);
+    }
+
+    this.logger.error(`${action} failed: ${raw}`);
+    return new Error(`${action} failed: ${raw}`);
   }
 
   async deleteFile(path: string): Promise<void> {
@@ -76,7 +114,35 @@ export class StorageService {
       .storage.from(this.bucket)
       .createSignedUrl(path, expiresInSeconds);
 
-    if (error) throw new Error(`Signed URL failed: ${error.message}`);
+    if (error) throw this.describe(error, 'Signed URL');
     return data.signedUrl;
+  }
+
+  /**
+   * Signed URLs for many objects at once, keyed by path. Used when listing a
+   * document set so one screen doesn't cost one round trip per file. Never
+   * throws: a file that can't be signed simply has no link, which is better
+   * than failing the whole list.
+   */
+  async getSignedUrls(paths: string[], expiresInSeconds = 3600): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    const unique = [...new Set(paths.filter(Boolean))];
+    if (!unique.length || !this.supabase) return out;
+
+    try {
+      const { data, error } = await this.supabase.storage
+        .from(this.bucket)
+        .createSignedUrls(unique, expiresInSeconds);
+      if (error) {
+        this.logger.error(`Batch signed URLs failed: ${error.message}`);
+        return out;
+      }
+      for (const row of data ?? []) {
+        if (row.signedUrl && row.path) out.set(row.path, row.signedUrl);
+      }
+    } catch (err: any) {
+      this.logger.error(`Batch signed URLs failed: ${err?.message}`);
+    }
+    return out;
   }
 }
