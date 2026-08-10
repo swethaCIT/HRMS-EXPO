@@ -11,9 +11,10 @@ import { announcementApi, holidayApi } from '../../services/api';
 import { initialsOf, avatarColor, PRESENCE_META } from '../../data/managerData';
 import GoalsSection from '../projects/GoalsSection';
 import {
-  T, HR_PEOPLE, HR_KIND_META, TINT, NEW_JOINERS, CELEBRATIONS,
+  T, HR_KIND_META, TINT,
 } from '../../data/hrData';
 import Icon from '../../components/Icon';
+import { useOrgSummary } from '../../utils/useOrgAnalytics';
 
 const { width } = Dimensions.get('window');
 
@@ -70,10 +71,23 @@ export default function HRDashboardScreen({ navigation }: any) {
   const name = (user?.email?.split('@')[0] || 'HR').replace(/\./g, ' ');
   const pending = requests.filter((r) => r.status === 'pending');
 
-  const present = HR_PEOPLE.filter((p) => p.presence === 'in' || p.presence === 'remote').length;
-  const onLeave = HR_PEOPLE.filter((p) => p.presence === 'leave').length;
-  const presentPct = Math.round((present / HR_PEOPLE.length) * 100);
-  const depts = new Set(HR_PEOPLE.map((p) => p.department)).size;
+  /**
+   * Org pulse, joiners and celebrations from the API. Previously all three came
+   * from module-level fixtures, so every HR user saw the same invented
+   * headcount, the same three "new joiners" and the same birthdays — under a
+   * pulsing LIVE badge. `orgLive` gates the badge so an unreachable backend
+   * says so instead of showing fiction.
+   */
+  const { data: org, loaded: orgLoaded, offline: orgOffline } = useOrgSummary();
+  const orgLive = orgLoaded && !orgOffline && !!org;
+
+  const headcount  = org?.headcount ?? 0;
+  const present    = org ? org.presence.in + org.presence.remote : 0;
+  const onLeave    = org?.presence.leave ?? 0;
+  const presentPct = org?.presence.availablePct ?? 0;
+  const depts      = org?.departments ?? 0;
+  const newJoiners = org?.newJoiners ?? [];
+  const celebrations = org?.celebrations ?? [];
 
   const byKind = pending.reduce<Record<string, number>>((acc, r) => {
     acc[r.kind] = (acc[r.kind] || 0) + 1; return acc;
@@ -107,7 +121,11 @@ export default function HRDashboardScreen({ navigation }: any) {
         <View style={st.card}>
           <View style={st.cardHead}>
             <Text style={st.cardTitle}>Organization · Today</Text>
-            <View style={st.livePill}><View style={st.liveDot} /><Text style={st.liveTx}>LIVE</Text></View>
+            {orgLive ? (
+              <View style={st.livePill}><View style={st.liveDot} /><Text style={st.liveTx}>LIVE</Text></View>
+            ) : (
+              <View style={st.stalePill}><Text style={st.staleTx}>{orgLoaded ? 'OFFLINE' : 'LOADING'}</Text></View>
+            )}
           </View>
           <View style={st.pulseRow}>
             <View style={st.pulseBig}>
@@ -117,7 +135,7 @@ export default function HRDashboardScreen({ navigation }: any) {
             </View>
             <View style={st.pulseGrid}>
               {[
-                { n: HR_PEOPLE.length, l: 'Headcount', c: T.primary },
+                { n: headcount, l: 'Headcount', c: T.primary },
                 { n: present,          l: 'Available', c: PRESENCE_META.in.dot },
                 { n: onLeave,          l: 'On leave',  c: PRESENCE_META.leave.dot },
                 { n: depts,            l: 'Departments', c: PRESENCE_META.remote.dot },
@@ -254,18 +272,23 @@ export default function HRDashboardScreen({ navigation }: any) {
         <View style={st.section}>
           <Text style={st.sectionTitle}>NEW JOINERS</Text>
           <View style={st.card}>
-            {NEW_JOINERS.map((j, i, arr) => (
-              <View key={j.name} style={[st.listRow, i < arr.length - 1 && st.listDivider]}>
+            {newJoiners.map((j, i, arr) => (
+              <View key={j.id} style={[st.listRow, i < arr.length - 1 && st.listDivider]}>
                 <View style={[st.listAvatar, { backgroundColor: avatarColor(j.name) }]}>
                   <Text style={st.listAvatarTx}>{initialsOf(j.name)}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={st.listName}>{j.name}</Text>
-                  <Text style={st.listSub}>{j.role}</Text>
+                  <Text style={st.listSub}>{j.designation || j.department || 'New joiner'}</Text>
                 </View>
-                <Text style={st.listMeta}>{j.when}</Text>
+                <Text style={st.listMeta}>{relDate(j.dateOfJoining)}</Text>
               </View>
             ))}
+            {newJoiners.length === 0 && (
+              <Text style={st.listEmpty}>
+                {orgLive ? 'Nobody joined in the last 60 days.' : 'Not available right now.'}
+              </Text>
+            )}
           </View>
         </View>
 
@@ -273,18 +296,25 @@ export default function HRDashboardScreen({ navigation }: any) {
         <View style={[st.section, { marginBottom: 8 }]}>
           <Text style={st.sectionTitle}>CELEBRATIONS</Text>
           <View style={st.card}>
-            {CELEBRATIONS.map((c, i, arr) => (
-              <View key={c.name + c.when} style={[st.listRow, i < arr.length - 1 && st.listDivider]}>
+            {celebrations.map((c, i, arr) => (
+              <View key={c.kind + c.name + c.day} style={[st.listRow, i < arr.length - 1 && st.listDivider]}>
                 <View style={[st.listAvatar, { backgroundColor: avatarColor(c.name) }]}>
                   <Text style={st.listAvatarTx}>{initialsOf(c.name)}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={st.listName}>{c.name}</Text>
-                  <Text style={st.listSub}>{c.type}</Text>
+                  <Text style={st.listSub}>
+                    {c.kind === 'birthday' ? '🎂 Birthday' : `🎉 ${c.years} year${c.years === 1 ? '' : 's'} at the company`}
+                  </Text>
                 </View>
-                <Text style={st.listMeta}>{c.when}</Text>
+                <Text style={st.listMeta}>{ordinal(c.day)}</Text>
               </View>
             ))}
+            {celebrations.length === 0 && (
+              <Text style={st.listEmpty}>
+                {orgLive ? 'No birthdays or work anniversaries this month.' : 'Not available right now.'}
+              </Text>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -370,5 +400,29 @@ const st = StyleSheet.create({
   listAvatarTx: { color: '#FFF', fontWeight: '700', fontSize: 13 },
   listName: { fontSize: 14, fontWeight: '600', color: T.ink },
   listSub: { fontSize: 12, color: T.sub, marginTop: 1 },
+  stalePill: { backgroundColor: '#F3F4F6', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  staleTx: { fontSize: 9.5, fontWeight: '800', color: T.faint, letterSpacing: 0.5 },
+  listEmpty: { fontSize: 12.5, color: T.faint, paddingVertical: 12, textAlign: 'center' },
   listMeta: { fontSize: 11, color: T.faint },
 });
+
+/** "3 days ago" / "in 2 days" for a YYYY-MM-DD joining date. */
+function relDate(iso: string): string {
+  const [y, m, d] = (iso || '').split('-').map(Number);
+  if (!y) return '—';
+  const then = new Date(y, (m || 1) - 1, d || 1).getTime();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.round((today.getTime() - then) / 86400000);
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 0) return `in ${Math.abs(days)}d`;
+  if (days < 30) return `${days}d ago`;
+  return `${Math.round(days / 30)}mo ago`;
+}
+
+/** 1 -> 1st, 22 -> 22nd — for "birthday on the 22nd". */
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}

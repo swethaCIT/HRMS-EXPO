@@ -3,10 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, StatusBar, Dimensions, RefreshControl,
 } from 'react-native';
 import Svg, { Circle, Rect, G, Line, Polyline, Text as SvgText } from 'react-native-svg';
-import { HR_PEOPLE } from '../../data/hrData';
-import {
-  T, ORG_HEADCOUNT, ATTRITION_TREND, ATTRITION_LABELS, GENDER_SPLIT,
-} from '../../data/hrData';
+import { T } from '../../data/hrData';
 import { analyticsApi } from '../../services/api';
 
 const { width } = Dimensions.get('window');
@@ -14,9 +11,6 @@ const PALETTE = ['#4F46E5', '#EC4899', '#0EA5E9', '#10B981', '#F59E0B', '#8B5CF6
 const withColors = (arr: { label: string; value: number }[]) =>
   arr.map((d, i) => ({ ...d, color: PALETTE[i % PALETTE.length] }));
 
-const TENURE_LABELS = ['< 1 yr', '1–2 yr', '2–3 yr', '3–5 yr', '5 yr+'];
-const TENURE_WEIGHTS = [0.18, 0.27, 0.27, 0.18, 0.10];
-const HIRES_SERIES = [1, 2, 1, 3, 2, 2]; // new joiners / month
 
 /* ── Donut ── */
 function Donut({ data, total }: { data: { label: string; value: number; color: string }[]; total: number }) {
@@ -138,38 +132,30 @@ export default function HRInsightsScreen() {
   }, [load]);
 
   /* ── Derived from analytics summary (graceful fallback to mock) ── */
-  const total = sum?.headcount ?? HR_PEOPLE.length;
-  const avgAtt = sum?.avgAttendance ?? Math.round(HR_PEOPLE.reduce((a, p) => a + p.attendancePct, 0) / HR_PEOPLE.length);
-  const orgHeadcount = sum?.headcountByDept?.length ? withColors(sum.headcountByDept) : ORG_HEADCOUNT;
-  const genderData = sum?.genderSplit?.length ? withColors(sum.genderSplit) : GENDER_SPLIT;
+  /* Real figures only — no fixture fallback. The offline banner plus dashes are
+     honest; an invented headcount or diversity split is not. */
+  const live = !!sum;
+  const total = sum?.headcount ?? 0;
+  const avgAtt = sum?.avgAttendance ?? 0;
+  const orgHeadcount = sum?.headcountByDept?.length ? withColors(sum.headcountByDept) : [];
+  const genderData = sum?.genderSplit?.length ? withColors(sum.genderSplit) : [];
   const departments = sum?.departments ?? orgHeadcount.length;
   const headTotal = orgHeadcount.reduce((a: number, d: any) => a + d.value, 0) || 1;
   const genderTotal = genderData.reduce((a: number, d: any) => a + d.value, 0) || 1;
 
-  const attritionNow = ATTRITION_TREND[ATTRITION_TREND.length - 1];
-  const attritionPrev = ATTRITION_TREND[ATTRITION_TREND.length - 2] ?? attritionNow;
-  const attritionDelta = attritionNow - attritionPrev;
+  /* Real attrition: separations per month this year, plus the rate. Note the
+     backend flags its own date basis as approximate (there is no separation-date
+     column, so it uses updatedAt) — surfaced in the card subtitle below. */
+  const attritionSeries: number[] = (sum?.attrition.byMonth ?? []).map((m: any) => m.value);
+  const attritionLabels: string[] = (sum?.attrition.byMonth ?? []).map((m: any) => m.label);
+  const attritionRate = sum?.attrition.ratePct ?? 0;
+  const separated = sum?.attrition.separated ?? 0;
 
-  /* Headcount growth: cumulative build-up ending at the current headcount. */
-  const growth = ATTRITION_LABELS.map((_, i) => Math.max(0, total - (ATTRITION_LABELS.length - 1 - i)));
-  const growthMax = Math.max(...growth, 1);
-  const growthDelta = growth[growth.length - 1] - growth[0];
-
-  /* Tenure distribution (proportional to headcount, remainder on the largest bucket). */
-  let acc = 0;
-  const tenure = TENURE_WEIGHTS.map((wgt, i) => {
-    const v = i === TENURE_WEIGHTS.length - 1 ? total - acc : Math.round(total * wgt);
-    acc += v;
-    return { label: TENURE_LABELS[i], value: Math.max(0, v), color: PALETTE[i % PALETTE.length] };
-  });
-  const tenureMax = Math.max(...tenure.map((t) => t.value), 1);
-
-  /* Talent movement — exits per month derived from attrition rate, hires illustrative. */
-  const exitsSeries = ATTRITION_TREND.map((a) => Math.max(0, Math.round((a / 100) * total)));
-  const hiresTotal = HIRES_SERIES.reduce((s, v) => s + v, 0);
-  const exitsTotal = exitsSeries.reduce((s, v) => s + v, 0);
-  const netMovement = hiresTotal - exitsTotal;
-  const movementMax = Math.max(...HIRES_SERIES, ...exitsSeries, 1);
+  /* REMOVED, deliberately: headcount-growth, tenure distribution and
+     "new hires vs exits". All three were computed from fixtures — the growth
+     curve was `total - (n - 1 - i)`, tenure was fixed weights × headcount, and
+     the hires series was hardcoded and commented "illustrative". None of it is
+     tracked, so showing it as HR analytics was fiction with a chart around it. */
 
   /* Diversity & inclusion */
   const womenRow = genderData.find((d: any) => /women|female/i.test(d.label));
@@ -204,7 +190,7 @@ export default function HRInsightsScreen() {
             { v: `${total}`, l: 'Headcount', c: '#4F46E5', bg: '#EEF2FF' },
             { v: `${departments}`, l: 'Departments', c: '#0EA5E9', bg: '#E0F2FE' },
             { v: `${avgAtt}%`, l: 'Avg attendance', c: '#10B981', bg: '#ECFDF5' },
-            { v: `${attritionNow}%`, l: 'Attrition', c: '#F59E0B', bg: '#FFF7ED' },
+            { v: live ? `${attritionRate}%` : '—', l: 'Attrition', c: '#F59E0B', bg: '#FFF7ED' },
           ].map((k) => (
             <View key={k.l} style={[st.kpiCard, { backgroundColor: k.bg }]}>
               <Text style={[st.kpiVal, { color: k.c }]}>{k.v}</Text>
@@ -213,22 +199,6 @@ export default function HRInsightsScreen() {
           ))}
         </View>
 
-        {/* Headcount growth */}
-        <View style={st.card}>
-          <View style={st.cardHead}>
-            <View style={{ flex: 1 }}>
-              <Text style={st.cardTitle}>HEADCOUNT GROWTH</Text>
-              <Text style={st.cardSub}>Total employees over the last 6 months</Text>
-            </View>
-            <Delta value={growthDelta} suffix="" />
-          </View>
-          <LineChart values={growth} max={growthMax} color={T.primary} fill />
-          <View style={st.barLabels}>
-            {ATTRITION_LABELS.map((l, i) => (
-              <Text key={i} style={[st.barLabel, i === ATTRITION_LABELS.length - 1 && { color: T.primary, fontWeight: '700' }]}>{l}</Text>
-            ))}
-          </View>
-        </View>
 
         {/* Attrition trend */}
         <View style={st.card}>
@@ -237,12 +207,12 @@ export default function HRInsightsScreen() {
               <Text style={st.cardTitle}>ATTRITION TREND</Text>
               <Text style={st.cardSub}>Monthly voluntary attrition · lower is better</Text>
             </View>
-            <Delta value={attritionDelta} invert />
+            <Text style={st.cardSub}>{separated} separation{separated === 1 ? '' : 's'} recorded</Text>
           </View>
-          <LineChart values={ATTRITION_TREND} max={10} color="#EF4444" />
+          <LineChart values={attritionSeries} max={Math.max(...attritionSeries, 3)} color="#EF4444" />
           <View style={st.barLabels}>
-            {ATTRITION_LABELS.map((l, i) => (
-              <Text key={i} style={[st.barLabel, i === ATTRITION_LABELS.length - 1 && { color: '#EF4444', fontWeight: '700' }]}>{l}</Text>
+            {attritionLabels.map((l: string, i: number) => (
+              <Text key={i} style={[st.barLabel, i === attritionLabels.length - 1 && { color: '#EF4444', fontWeight: '700' }]}>{l}</Text>
             ))}
           </View>
         </View>
@@ -313,39 +283,7 @@ export default function HRInsightsScreen() {
           </View>
         </View>
 
-        {/* Tenure distribution */}
-        <View style={st.card}>
-          <Text style={st.cardTitle}>TENURE DISTRIBUTION</Text>
-          <Text style={st.cardSub}>Experience with the company</Text>
-          {tenure.map((d) => (
-            <View key={d.label} style={st.hcRow}>
-              <Text style={st.hcLabel}>{d.label}</Text>
-              <View style={st.hcTrack}>
-                <View style={[st.hcFill, { width: `${(d.value / tenureMax) * 100}%`, backgroundColor: d.color }]} />
-              </View>
-              <Text style={st.hcVal}>{d.value}</Text>
-            </View>
-          ))}
-        </View>
 
-        {/* Talent movement: hires vs exits */}
-        <View style={st.card}>
-          <View style={st.cardHead}>
-            <View style={{ flex: 1 }}>
-              <Text style={st.cardTitle}>NEW HIRES VS EXITS</Text>
-              <Text style={st.cardSub}>Talent movement over 6 months</Text>
-            </View>
-            <Text style={[st.netPill, { color: netMovement >= 0 ? '#10B981' : '#EF4444' }]}>Net {netMovement >= 0 ? '+' : ''}{netMovement}</Text>
-          </View>
-          <GroupedBars a={HIRES_SERIES} b={exitsSeries} max={movementMax} ca={T.primary} cb="#EF4444" />
-          <View style={st.barLabels}>
-            {ATTRITION_LABELS.map((l, i) => (<Text key={i} style={st.barLabel}>{l}</Text>))}
-          </View>
-          <View style={st.legendInline}>
-            <View style={st.legendRowInline}><View style={[st.legendDot, { backgroundColor: T.primary }]} /><Text style={st.legendInlineTx}>Hires ({hiresTotal})</Text></View>
-            <View style={st.legendRowInline}><View style={[st.legendDot, { backgroundColor: '#EF4444' }]} /><Text style={st.legendInlineTx}>Exits ({exitsTotal})</Text></View>
-          </View>
-        </View>
 
         {/* Average attendance gauge */}
         <View style={st.card}>

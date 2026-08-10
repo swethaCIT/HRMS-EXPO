@@ -3,9 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, StatusBar, Dimensions, RefreshControl,
 } from 'react-native';
 import Svg, { Circle, Rect, G, Line, Polyline, Text as SvgText } from 'react-native-svg';
-import {
-  T, TEAM, ATTENDANCE_TREND, TREND_LABELS, LEAVE_SPLIT, DEPT_HEADCOUNT,
-} from '../../data/managerData';
+import { T } from '../../data/managerData';
 import { analyticsApi } from '../../services/api';
 
 const { width } = Dimensions.get('window');
@@ -131,15 +129,18 @@ export default function InsightsScreen() {
     setRefreshing(true); await load(); setRefreshing(false);
   }, [load]);
 
-  /* ── Derived from analytics summary (graceful fallback to mock) ── */
-  const avgAtt = sum?.avgAttendance ?? Math.round(mean(TEAM.map((m) => m.attendancePct)));
-  const avgUtil = Math.round(mean(TEAM.map((m) => m.utilization)));
-  const avgPerf = Math.round(mean(TEAM.map((m) => m.performance)));
+  /* ── Derived from the analytics summary. NO fixture fallbacks: an
+     unreachable backend shows the offline banner and dashes, because a
+     plausible-looking invented number is worse than an obvious gap. Utilization
+     and review scores are deliberately absent — the API does not track them,
+     and the old values were `75 + (i % 20)` / `80 + (i % 18)` per row index. */
+  const live = !!sum;
+  const avgAtt = sum?.avgAttendance ?? 0;
 
-  const attendanceTrend: number[] = sum?.attendanceTrend?.length ? sum.attendanceTrend : ATTENDANCE_TREND;
-  const trendLabels: string[] = sum?.attendanceLabels?.length ? sum.attendanceLabels : TREND_LABELS;
-  const leaveSplit = sum?.leaveDistribution?.length ? withColors(sum.leaveDistribution) : LEAVE_SPLIT;
-  const deptHeadcount = sum?.headcountByDept?.length ? withColors(sum.headcountByDept) : DEPT_HEADCOUNT;
+  const attendanceTrend: number[] = sum?.attendanceTrend?.length ? sum.attendanceTrend : [];
+  const trendLabels: string[] = sum?.attendanceLabels?.length ? sum.attendanceLabels : [];
+  const leaveSplit = sum?.leaveDistribution?.length ? withColors(sum.leaveDistribution) : [];
+  const deptHeadcount = sum?.headcountByDept?.length ? withColors(sum.headcountByDept) : [];
   const leaveTotal = leaveSplit.reduce((a: number, d: any) => a + d.value, 0) || 1;
   const headTotal = deptHeadcount.reduce((a: number, d: any) => a + d.value, 0) || 1;
 
@@ -149,30 +150,17 @@ export default function InsightsScreen() {
   const thisWk = Math.round(mean(attendanceTrend.slice(halfAt)));
   const attDelta = thisWk - prevWk;
 
-  /* Utilization/productivity trend derived from the attendance shape × avg utilization. */
-  const utilTrend = attendanceTrend.map((v) => clamp(Math.round(v * (avgUtil / 100))));
-
-  /* Today's presence breakdown from the team roster. */
-  const present = TEAM.filter((m) => m.presence === 'in' || m.presence === 'remote').length;
-  const onLeave = TEAM.filter((m) => m.presence === 'leave').length;
-  const absent = TEAM.filter((m) => m.presence === 'out').length;
-
-  /* On-time % = present members who punched in by 09:15. */
-  const punchedIn = TEAM.filter((m) => toMinutes(m.checkIn) != null);
-  const onTime = punchedIn.filter((m) => (toMinutes(m.checkIn) as number) <= 9 * 60 + 15).length;
-  const onTimePct = punchedIn.length ? Math.round((onTime / punchedIn.length) * 100) : 0;
-
-  const avgHours = (avgAtt / 100 * 9).toFixed(1);
-  const pendingCount = TEAM.reduce((a, m) => a + m.pending, 0);
-
-  const teamAttendance = [...TEAM].sort((a, b) => b.attendancePct - a.attendancePct);
-  const topPerformers = [...TEAM].sort((a, b) => b.performance - a.performance).slice(0, 3);
+  /* Today's presence — real counts from attendance rows and approved leave. */
+  const present = sum ? sum.presence.in + sum.presence.remote : 0;
+  const onLeave = sum?.presence.leave ?? 0;
+  const absent = sum?.presence.out ?? 0;
+  const headcount = sum?.presence.total ?? 0;
 
   const miniStats = [
-    { v: `${avgHours}`, l: 'Avg hrs / day', c: T.primary },
-    { v: `${onTimePct}%`, l: 'On-time rate', c: '#10B981' },
-    { v: `${present}/${TEAM.length}`, l: 'Present today', c: '#0EA5E9' },
-    { v: `${pendingCount}`, l: 'Pending approvals', c: '#F59E0B' },
+    { v: live ? `${headcount}` : '—', l: 'Headcount', c: T.primary },
+    { v: live ? `${sum!.departments}` : '—', l: 'Departments', c: '#0EA5E9' },
+    { v: live ? `${present}/${headcount}` : '—', l: 'Available today', c: '#10B981' },
+    { v: live ? `${sum!.leaveDaysApproved}` : '—', l: 'Leave days (yr)', c: '#F59E0B' },
   ];
 
   return (
@@ -180,7 +168,7 @@ export default function InsightsScreen() {
       <StatusBar barStyle="light-content" backgroundColor={T.header} />
       <View style={st.header}>
         <Text style={st.hTitle}>Team Insights</Text>
-        <Text style={st.hSub}>Last 7 days · {TEAM.length} members</Text>
+        <Text style={st.hSub}>Last 7 days · {live ? `${headcount} employees` : 'loading…'}</Text>
       </View>
 
       <ScrollView
@@ -200,8 +188,8 @@ export default function InsightsScreen() {
         <View style={st.kpiRow}>
           {[
             { v: `${avgAtt}%`, l: 'Avg attendance', c: '#10B981', bg: '#ECFDF5', d: attDelta },
-            { v: `${avgUtil}%`, l: 'Avg utilization', c: '#4F46E5', bg: '#EEF2FF', d: 3 },
-            { v: `${avgPerf}%`, l: 'Avg performance', c: '#F59E0B', bg: '#FFF7ED', d: 2 },
+            { v: live ? `${sum!.presence.availablePct}%` : '—', l: 'Available today', c: '#4F46E5', bg: '#EEF2FF', d: 0 },
+            { v: live ? `${sum!.attrition.ratePct}%` : '—', l: 'Attrition', c: '#F59E0B', bg: '#FFF7ED', d: 0 },
           ].map((k) => (
             <View key={k.l} style={[st.kpiCard, { backgroundColor: k.bg }]}>
               <Text style={[st.kpiVal, { color: k.c }]}>{k.v}</Text>
@@ -263,28 +251,12 @@ export default function InsightsScreen() {
                   <Text style={st.breakVal}>{b.v}</Text>
                 </View>
                 <Text style={st.breakLabel}>{b.l}</Text>
-                <Text style={st.breakPct}>{Math.round((b.v / TEAM.length) * 100)}%</Text>
+                <Text style={st.breakPct}>{headcount ? Math.round((b.v / headcount) * 100) : 0}%</Text>
               </View>
             ))}
           </View>
         </View>
 
-        {/* Productivity / utilization trend */}
-        <View style={st.card}>
-          <View style={st.cardHead}>
-            <View style={{ flex: 1 }}>
-              <Text style={st.cardTitle}>PRODUCTIVITY TREND</Text>
-              <Text style={st.cardSub}>Billable utilization · rolling 7 days</Text>
-            </View>
-            <Text style={[st.trendUp, { color: T.primary }]}>{avgUtil}% avg</Text>
-          </View>
-          <LineChart values={utilTrend} max={100} color={T.primary} fill />
-          <View style={st.barLabels}>
-            {trendLabels.map((l: string, i: number) => (
-              <Text key={i} style={st.barLabel}>{l}</Text>
-            ))}
-          </View>
-        </View>
 
         {/* Leave split donut */}
         <View style={st.card}>
@@ -326,39 +298,7 @@ export default function InsightsScreen() {
           ))}
         </View>
 
-        {/* Per-member attendance */}
-        <View style={st.card}>
-          <Text style={st.cardTitle}>TEAM ATTENDANCE</Text>
-          <Text style={st.cardSub}>30-day presence rate per member</Text>
-          {teamAttendance.map((m) => {
-            const c = m.attendancePct >= 95 ? '#10B981' : m.attendancePct >= 88 ? T.primary : '#F59E0B';
-            return (
-              <View key={m.id} style={st.memRow}>
-                <Text style={st.memName} numberOfLines={1}>{m.name}</Text>
-                <View style={st.hcTrack}>
-                  <View style={[st.hcFill, { width: `${m.attendancePct}%`, backgroundColor: c }]} />
-                </View>
-                <Text style={[st.memPct, { color: c }]}>{m.attendancePct}%</Text>
-              </View>
-            );
-          })}
-        </View>
 
-        {/* Top performers */}
-        <View style={[st.card, { marginBottom: 4 }]}>
-          <Text style={st.cardTitle}>TOP PERFORMERS</Text>
-          <Text style={st.cardSub}>Highest last-review scores</Text>
-          {topPerformers.map((m, i) => (
-            <View key={m.id} style={[st.tpRow, i < topPerformers.length - 1 && st.tpDivider]}>
-              <Text style={st.tpRank}>{['🥇', '🥈', '🥉'][i]}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={st.tpName}>{m.name}</Text>
-                <Text style={st.tpDesig}>{m.designation}</Text>
-              </View>
-              <View style={st.tpScore}><Text style={st.tpScoreTx}>{m.performance}</Text></View>
-            </View>
-          ))}
-        </View>
       </ScrollView>
     </View>
   );

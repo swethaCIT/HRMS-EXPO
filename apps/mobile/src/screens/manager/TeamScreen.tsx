@@ -3,8 +3,9 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput,
 } from 'react-native';
 import {
-  T, TEAM, PRESENCE_META, Presence, initialsOf, avatarColor, TeamMember,
+  T, PRESENCE_META, Presence, initialsOf, avatarColor, TeamMember,
 } from '../../data/managerData';
+import { useDirectory } from '../../utils/useOrgAnalytics';
 import { employeeApi } from '../../services/api';
 
 const FILTERS: { key: 'all' | Presence; label: string }[] = [
@@ -18,33 +19,40 @@ const FILTERS: { key: 'all' | Presence; label: string }[] = [
 export default function TeamScreen({ navigation }: any) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | Presence>('all');
-  const [team, setTeam] = useState<TeamMember[]>(TEAM);
-  const [offline, setOffline] = useState(false);
 
-  // Pull the real employee directory; fall back to mock offline.
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await employeeApi.getAll();
-        if (Array.isArray(data) && data.length) {
-          setTeam(data.map((e: any, i: number): TeamMember => ({
-            id: e.id,
-            employeeId: e.employeeId,
-            name: `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim() || (e.user?.email ?? 'Employee'),
-            designation: e.designation || '—',
-            department: e.department || 'General',
-            email: e.user?.email || '',
-            phone: e.phone || '',
-            presence: (['in', 'remote', 'in', 'leave', 'in'] as Presence[])[i % 5],
-            checkIn: '09:0' + (i % 6) + ' AM',
-            attendancePct: 90 + (i % 9), leaveBalance: 8 + (i % 8), utilization: 75 + (i % 20),
-            performance: 80 + (i % 18), pending: 0, projects: [],
-          })));
-        }
-        setOffline(false);
-      } catch { setOffline(true); /* keep mock */ }
-    })();
-  }, []);
+  /**
+   * The roster comes from /analytics/directory, which reports where each person
+   * actually is today (from their attendance row and any approved leave).
+   *
+   * This previously fetched real employees and then INVENTED their metrics from
+   * the array index — `presence: [...][i % 5]`, `checkIn: '09:0'+(i%6)`,
+   * `attendancePct: 90+(i%9)`, `performance: 80+(i%18)`. Real names carrying
+   * arithmetic-on-row-position as if it were HR data: a manager could read
+   * "Rahul — 94% attendance, 88% performance" and act on a number that meant
+   * nothing. Metrics the API does not expose are now left undefined and render
+   * as "—" instead of being fabricated.
+   */
+  const { people, loaded, offline } = useDirectory();
+
+  const team: TeamMember[] = useMemo(
+    () =>
+      people.map((p) => ({
+        id: p.id,
+        employeeId: p.employeeId,
+        name: p.name,
+        designation: p.designation || '—',
+        department: p.department || 'General',
+        email: p.email || '',
+        phone: p.phone || '',
+        presence: p.presence,
+        checkIn: p.checkIn
+          ? new Date(p.checkIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          : undefined,
+        pending: p.pendingRequests,
+        projects: [],
+      })) as TeamMember[],
+    [people],
+  );
 
   const list = useMemo(() => {
     return team.filter((m) => {
@@ -125,9 +133,11 @@ export default function TeamScreen({ navigation }: any) {
                 </View>
               </View>
 
+              {/* Per-person attendance % isn't exposed by the API yet, so show
+                  the honest presence label rather than an invented number. */}
               <View style={st.attBox}>
-                <Text style={st.attNum}>{m.attendancePct}%</Text>
-                <Text style={st.attLabel}>att.</Text>
+                <Text style={[st.attNum, { fontSize: 11 }]}>{PRESENCE_META[m.presence].label}</Text>
+                <Text style={st.attLabel}>today</Text>
               </View>
             </TouchableOpacity>
           );

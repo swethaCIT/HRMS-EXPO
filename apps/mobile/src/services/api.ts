@@ -113,7 +113,10 @@ export const documentApi = {
 };
 
 export const analyticsApi = {
+  /** Headcount, presence today, trends, new joiners, celebrations, attrition. */
   summary: () => api.get('/analytics/summary'),
+  /** Every employee with where they are TODAY, from real attendance + leave. */
+  directory: () => api.get('/analytics/directory'),
 };
 
 export const payrollApi = {

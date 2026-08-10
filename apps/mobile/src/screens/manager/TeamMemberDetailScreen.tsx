@@ -2,32 +2,10 @@ import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Linking,
 } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
 import {
   T, TEAM, PRESENCE_META, initialsOf, avatarColor, TeamMember,
 } from '../../data/managerData';
 
-function Ring({ pct, color, label }: { pct: number; color: string; label: string }) {
-  const size = 76, stroke = 8, r = (size - stroke) / 2, c = 2 * Math.PI * r;
-  return (
-    <View style={{ alignItems: 'center' }}>
-      <Svg width={size} height={size}>
-        <Circle cx={size / 2} cy={size / 2} r={r} stroke="#EEF2FF" strokeWidth={stroke} fill="none" />
-        <Circle
-          cx={size / 2} cy={size / 2} r={r} stroke={color} strokeWidth={stroke} fill="none"
-          strokeDasharray={`${c} ${c}`} strokeDashoffset={c - (pct / 100) * c}
-          strokeLinecap="round" rotation="-90" origin={`${size / 2}, ${size / 2}`}
-        />
-      </Svg>
-      <Text style={ringSt.center}>{pct}%</Text>
-      <Text style={ringSt.label}>{label}</Text>
-    </View>
-  );
-}
-const ringSt = StyleSheet.create({
-  center: { position: 'absolute', top: 28, fontSize: 16, fontWeight: '800', color: T.ink },
-  label: { fontSize: 11, color: T.sub, marginTop: 6 },
-});
 
 export default function TeamMemberDetailScreen({ route, navigation }: any) {
   // Accept either a full member object (People / Team) or an id to look up.
@@ -97,21 +75,23 @@ export default function TeamMemberDetailScreen({ route, navigation }: any) {
       </View>
 
       <ScrollView style={st.body} contentContainerStyle={{ padding: 16, paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
-        {/* performance rings */}
+        {/* Attendance %, utilization and review scores are not tracked by the
+            API. They used to render here as three confident rings fed by
+            `90 + (i % 9)` / `75 + (i % 20)` / `80 + (i % 18)` — invented from
+            the person's row index and shown as their performance. Removed
+            rather than faked; today's real presence is in the header chip. */}
         <View style={st.card}>
           <Text style={st.cardTitle}>Performance Snapshot</Text>
-          <View style={st.ringRow}>
-            <Ring pct={m.attendancePct} color="#10B981" label="Attendance" />
-            <Ring pct={m.utilization} color="#4F46E5" label="Utilization" />
-            <Ring pct={m.performance} color="#F59E0B" label="Last review" />
-          </View>
+          <Text style={st.notTracked}>
+            Attendance rate, utilization and review scores aren't tracked yet, so there's nothing to show here.
+          </Text>
         </View>
 
         {/* quick facts */}
         <View style={st.statGrid}>
           {[
             { e: '🆔', l: 'Employee ID', v: m.employeeId },
-            { e: '📅', l: 'Leave balance', v: `${m.leaveBalance} days` },
+            { e: '📅', l: 'Leave balance', v: m.leaveBalance != null ? `${m.leaveBalance} days` : '—' },
             { e: '🗂️', l: 'Open requests', v: `${m.pending}` },
             { e: '📞', l: 'Phone', v: m.phone },
           ].map((s) => (
@@ -137,8 +117,12 @@ export default function TeamMemberDetailScreen({ route, navigation }: any) {
         <View style={st.card}>
           <Text style={st.cardTitle}>This Week</Text>
           <View style={st.weekRow}>
+            {/* Was `(m.attendancePct + i * 3) % 7 !== 0` — a fake pattern from a
+                fake number. Until per-day history is exposed, only today is
+                known, so the other days render as unknown. */}
             {['M', 'T', 'W', 'T', 'F'].map((d, i) => {
-              const present = (m.attendancePct + i * 3) % 7 !== 0;
+              const isToday = new Date().getDay() === i + 1;
+              const present = isToday && (m.presence === 'in' || m.presence === 'remote');
               return (
                 <View key={i} style={st.dayCol}>
                   <View style={[st.dayDot, { backgroundColor: present ? '#10B981' : '#E5E7EB' }]} />
@@ -185,6 +169,7 @@ const st = StyleSheet.create({
 
   body: { flex: 1 },
   card: { backgroundColor: T.card, borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
+  notTracked: { fontSize: 12.5, color: '#9CA3AF', lineHeight: 18, marginTop: 6 },
   cardTitle: { fontSize: 15, fontWeight: '700', color: T.ink, marginBottom: 16 },
   ringRow: { flexDirection: 'row', justifyContent: 'space-around' },
 

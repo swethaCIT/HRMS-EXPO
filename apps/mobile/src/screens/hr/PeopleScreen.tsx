@@ -1,18 +1,16 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, TextInput, Modal, Alert, ActivityIndicator,
 } from 'react-native';
 import { PRESENCE_META, initialsOf, avatarColor, TeamMember } from '../../data/managerData';
-import { T, HR_PEOPLE } from '../../data/hrData';
-import { employeeApi, onboardingApi } from '../../services/api';
+import { T } from '../../data/hrData';
+import { useDirectory } from '../../utils/useOrgAnalytics';
+import { onboardingApi } from '../../services/api';
 import { getErrorMessage } from '../../utils/errorMessage';
 
 export default function PeopleScreen({ navigation }: any) {
   const [q, setQ] = useState('');
   const [dept, setDept] = useState<'All' | string>('All');
-  const [people, setPeople] = useState<TeamMember[]>(HR_PEOPLE);
-  const [live, setLive] = useState(false);
-  const [offline, setOffline] = useState(false);
 
   // ── New-hire onboarding invite ──
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -37,31 +35,35 @@ export default function PeopleScreen({ navigation }: any) {
     } finally { setInviting(false); }
   };
 
-  // Pull the real employee directory from Supabase; fall back to mock offline.
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await employeeApi.getAll();
-        if (Array.isArray(data) && data.length) {
-          const mapped: TeamMember[] = data.map((e: any) => ({
-            id: e.id,
-            employeeId: e.employeeId,
-            name: `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim() || (e.user?.email ?? 'Employee'),
-            designation: e.designation || '—',
-            department: e.department || 'General',
-            email: e.user?.email || '',
-            phone: e.phone || '',
-            presence: 'in',
-            checkIn: '09:00 AM',
-            attendancePct: 95, leaveBalance: 12, utilization: 80, performance: 85, pending: 0, projects: [],
-          }));
-          setPeople(mapped);
-          setLive(true);
-        }
-        setOffline(false);
-      } catch { setOffline(true); /* keep mock fallback */ }
-    })();
-  }, []);
+  /**
+   * Real directory with today's actual presence. This previously fetched real
+   * employees and then stamped every one of them `presence: 'in'`,
+   * `checkIn: '09:00 AM'`, `attendancePct: 95` — so the whole company always
+   * looked present at 9am with identical stats. Presence now comes from each
+   * person's attendance row and approved leave; untracked metrics are omitted.
+   */
+  const { people: directory, loaded, offline } = useDirectory();
+  const live = loaded && !offline;
+
+  const people: TeamMember[] = useMemo(
+    () =>
+      directory.map((p) => ({
+        id: p.id,
+        employeeId: p.employeeId,
+        name: p.name,
+        designation: p.designation || '—',
+        department: p.department || 'General',
+        email: p.email || '',
+        phone: p.phone || '',
+        presence: p.presence,
+        checkIn: p.checkIn
+          ? new Date(p.checkIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          : undefined,
+        pending: p.pendingRequests,
+        projects: [],
+      })) as TeamMember[],
+    [directory],
+  );
 
   const departments = useMemo(
     () => ['All', ...Array.from(new Set(people.map((p) => p.department)))],
@@ -120,7 +122,7 @@ export default function PeopleScreen({ navigation }: any) {
         {offline && (
           <View style={st.offline}>
             <View style={st.offlineDot} />
-            <Text style={st.offlineTx}>Backend unreachable · showing demo data</Text>
+            <Text style={st.offlineTx}>Backend unreachable · directory unavailable</Text>
           </View>
         )}
         {list.length === 0 && (
