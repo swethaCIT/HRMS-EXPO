@@ -8,10 +8,11 @@ import { fetchNotifications } from '../../store/slices/notificationsSlice';
 import { fetchApprovals } from '../../store/slices/approvalsSlice';
 import { useLivePolling } from '../../utils/useLivePolling';
 import {
-  T, TEAM, PRESENCE_META, KIND_META, TINT, initialsOf, avatarColor,
+  T, PRESENCE_META, KIND_META, TINT, initialsOf, avatarColor, TeamMember,
 } from '../../data/managerData';
 import GoalsSection from '../projects/GoalsSection';
 import Icon from '../../components/Icon';
+import { useOrgSummary, useDirectory, DirectoryPerson } from '../../utils/useOrgAnalytics';
 import { announcementApi, holidayApi } from '../../services/api';
 
 const { width } = Dimensions.get('window');
@@ -71,12 +72,27 @@ export default function ManagerDashboardScreen({ navigation }: any) {
   const initials = initialsOf(name);
 
   const pending = approvals.filter((a) => a.status === 'pending');
-  const inCount     = TEAM.filter((m) => m.presence === 'in').length;
-  const remoteCount = TEAM.filter((m) => m.presence === 'remote').length;
-  const leaveCount  = TEAM.filter((m) => m.presence === 'leave').length;
-  const outCount    = TEAM.filter((m) => m.presence === 'out').length;
-  const presentPct  = Math.round(((inCount + remoteCount) / TEAM.length) * 100);
-  const avgAtt      = Math.round(TEAM.reduce((a, m) => a + m.attendancePct, 0) / TEAM.length);
+
+  /**
+   * Team pulse from the API. These five numbers were previously computed from a
+   * module-level TEAM fixture, so every manager on every device saw the same
+   * invented "86% present · 7 members" under a pulsing LIVE badge. `pulseLive`
+   * gates the badge and the card so an unreachable backend shows an honest
+   * message rather than convincing fiction.
+   */
+  const { data: org, loaded: orgLoaded, offline: orgOffline } = useOrgSummary();
+  const { people: directory } = useDirectory();
+  const pulseLive = orgLoaded && !orgOffline && !!org;
+
+  const inCount     = org?.presence.in ?? 0;
+  const remoteCount = org?.presence.remote ?? 0;
+  const leaveCount  = org?.presence.leave ?? 0;
+  const outCount    = org?.presence.out ?? 0;
+  const teamSize    = org?.presence.total ?? 0;
+  const presentPct  = org?.presence.availablePct ?? 0;
+  const avgAtt      = org?.avgAttendance ?? 0;
+  /** Who is genuinely unavailable today, from real leave + attendance records. */
+  const awayToday   = directory.filter((p) => p.presence === 'leave' || p.presence === 'out');
 
   // group pending counts by kind for the summary chips
   const byKind = pending.reduce<Record<string, number>>((acc, a) => {
@@ -108,36 +124,50 @@ export default function ManagerDashboardScreen({ navigation }: any) {
       </View>
 
       <ScrollView style={st.body} contentContainerStyle={st.bodyC} showsVerticalScrollIndicator={false}>
-        {/* ── Team pulse ── */}
+        {/* ── Team pulse (live) ── */}
         <View style={st.card}>
           <View style={st.cardHead}>
             <Text style={st.cardTitle}>Team Pulse · Today</Text>
-            <View style={st.livePill}><View style={st.liveDot} /><Text style={st.liveTx}>LIVE</Text></View>
+            {/* The LIVE badge appears only when these really are live numbers. */}
+            {pulseLive ? (
+              <View style={st.livePill}><View style={st.liveDot} /><Text style={st.liveTx}>LIVE</Text></View>
+            ) : (
+              <View style={st.stalePill}><Text style={st.staleTx}>{orgLoaded ? 'OFFLINE' : 'LOADING'}</Text></View>
+            )}
           </View>
 
-          <View style={st.pulseRow}>
-            <View style={st.pulseBig}>
-              <Text style={st.pulseBigNum}>{presentPct}%</Text>
-              <Text style={st.pulseBigLabel}>present</Text>
-              <View style={st.barTrack}>
-                <View style={[st.barFill, { width: `${presentPct}%` }]} />
+          {!pulseLive ? (
+            <Text style={st.pulseEmpty}>
+              {orgLoaded
+                ? "Couldn't reach the server, so today's presence isn't available. Pull down to retry."
+                : 'Loading today’s presence…'}
+            </Text>
+          ) : (
+            <View style={st.pulseRow}>
+              <View style={st.pulseBig}>
+                <Text style={st.pulseBigNum}>{presentPct}%</Text>
+                <Text style={st.pulseBigLabel}>available</Text>
+                <View style={st.barTrack}>
+                  <View style={[st.barFill, { width: `${presentPct}%` }]} />
+                </View>
+                <Text style={st.pulseBigSub}>{inCount + remoteCount} of {teamSize}</Text>
+              </View>
+              <View style={st.pulseGrid}>
+                {[
+                  { n: inCount,     l: 'In office', c: PRESENCE_META.in.dot },
+                  { n: remoteCount, l: 'Remote',    c: PRESENCE_META.remote.dot },
+                  { n: leaveCount,  l: 'On leave',  c: PRESENCE_META.leave.dot },
+                  { n: outCount,    l: 'Not in',    c: PRESENCE_META.out.dot },
+                ].map((x) => (
+                  <View key={x.l} style={st.pulseCell}>
+                    <View style={[st.pulseCellDot, { backgroundColor: x.c }]} />
+                    <Text style={st.pulseCellNum}>{x.n}</Text>
+                    <Text style={st.pulseCellLabel}>{x.l}</Text>
+                  </View>
+                ))}
               </View>
             </View>
-            <View style={st.pulseGrid}>
-              {[
-                { n: inCount,     l: 'In office', c: PRESENCE_META.in.dot },
-                { n: remoteCount, l: 'Remote',    c: PRESENCE_META.remote.dot },
-                { n: leaveCount,  l: 'On leave',  c: PRESENCE_META.leave.dot },
-                { n: outCount,    l: 'Not in',    c: PRESENCE_META.out.dot },
-              ].map((x) => (
-                <View key={x.l} style={st.pulseCell}>
-                  <View style={[st.pulseCellDot, { backgroundColor: x.c }]} />
-                  <Text style={st.pulseCellNum}>{x.n}</Text>
-                  <Text style={st.pulseCellLabel}>{x.l}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
+          )}
         </View>
 
         {/* ── Pending approvals summary ── */}
@@ -225,9 +255,10 @@ export default function ManagerDashboardScreen({ navigation }: any) {
         {/* ── KPI strip ── */}
         <View style={st.kpiRow}>
           {[
-            { v: `${TEAM.length}`, l: 'Team size', e: '👥', bg: '#EEF2FF' },
-            { v: `${avgAtt}%`,     l: 'Avg attendance', e: '📊', bg: '#ECFDF5' },
-            { v: `${TEAM.reduce((a, m) => a + m.pending, 0)}`, l: 'Open requests', e: '🗂️', bg: '#FFF7ED' },
+            // Real headcount, real 7-day attendance average, real pending queue.
+            { v: pulseLive ? `${teamSize}` : '—', l: 'Team size', e: '👥', bg: '#EEF2FF' },
+            { v: pulseLive ? `${avgAtt}%` : '—',  l: 'Avg attendance', e: '📊', bg: '#ECFDF5' },
+            { v: `${pending.length}`,             l: 'Open requests', e: '🗂️', bg: '#FFF7ED' },
           ].map((k) => (
             <View key={k.l} style={[st.kpiCard, { backgroundColor: k.bg }]}>
               <Text style={st.kpiEmoji}>{k.e}</Text>
@@ -281,18 +312,19 @@ export default function ManagerDashboardScreen({ navigation }: any) {
         <View style={[st.section, { marginBottom: 8 }]}>
           <Text style={st.sectionTitle}>AWAY TODAY</Text>
           <View style={st.card}>
-            {TEAM.filter((m) => m.presence === 'leave' || m.presence === 'out').map((m, i, arr) => (
+            {/* Real people, from today's attendance and approved leave. */}
+            {awayToday.map((m, i, arr) => (
               <TouchableOpacity
                 key={m.id}
                 style={[st.awayRow, i < arr.length - 1 && st.awayDivider]}
-                onPress={() => navigation?.navigate('TeamMember', { member: m })}
+                onPress={() => navigation?.navigate('TeamMember', { id: m.id, member: toTeamMember(m) })}
               >
                 <View style={[st.awayAvatar, { backgroundColor: avatarColor(m.name) }]}>
                   <Text style={st.awayAvatarTx}>{initialsOf(m.name)}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={st.awayName}>{m.name}</Text>
-                  <Text style={st.awayDesig}>{m.designation}</Text>
+                  <Text style={st.awayDesig}>{m.designation || m.department || m.employeeId}</Text>
                 </View>
                 <View style={[st.awayChip, { backgroundColor: PRESENCE_META[m.presence].chipBg }]}>
                   <Text style={[st.awayChipTx, { color: PRESENCE_META[m.presence].chipFg }]}>
@@ -301,8 +333,10 @@ export default function ManagerDashboardScreen({ navigation }: any) {
                 </View>
               </TouchableOpacity>
             ))}
-            {TEAM.filter((m) => m.presence === 'leave' || m.presence === 'out').length === 0 && (
-              <Text style={st.awayEmpty}>Everyone is in today 🎉</Text>
+            {awayToday.length === 0 && (
+              <Text style={st.awayEmpty}>
+                {pulseLive ? 'Everyone is in today 🎉' : 'Attendance unavailable right now.'}
+              </Text>
             )}
           </View>
         </View>
@@ -342,6 +376,10 @@ const st = StyleSheet.create({
   pulseRow: { flexDirection: 'row', gap: 16 },
   pulseBig: { width: width * 0.30, alignItems: 'center', justifyContent: 'center' },
   pulseBigNum: { fontSize: 34, fontWeight: '800', color: T.primary },
+  stalePill: { backgroundColor: '#F3F4F6', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  staleTx: { fontSize: 9.5, fontWeight: '800', color: T.faint, letterSpacing: 0.5 },
+  pulseEmpty: { fontSize: 12.5, color: T.faint, paddingVertical: 14, lineHeight: 18 },
+  pulseBigSub: { fontSize: 11, color: T.faint, marginTop: 6 },
   pulseBigLabel: { fontSize: 12, color: T.sub, marginTop: -2, marginBottom: 8 },
   barTrack: { width: '100%', height: 6, borderRadius: 3, backgroundColor: '#EEF2FF', overflow: 'hidden' },
   barFill: { height: 6, borderRadius: 3, backgroundColor: T.primary },
@@ -402,3 +440,24 @@ const st = StyleSheet.create({
   awayChipTx: { fontSize: 10.5, fontWeight: '700' },
   awayEmpty: { textAlign: 'center', color: T.sub, fontSize: 13, paddingVertical: 10 },
 });
+
+/**
+ * Adapt a live directory row to the shape TeamMemberDetailScreen expects.
+ * That screen still reads the richer TeamMember fixture fields (utilization,
+ * performance, review scores) which the API does not yet expose, so those are
+ * left undefined rather than invented — the detail screen shows "—" for them.
+ */
+function toTeamMember(p: DirectoryPerson): Partial<TeamMember> & { id: string; name: string } {
+  return {
+    id: p.id,
+    employeeId: p.employeeId,
+    name: p.name,
+    designation: p.designation ?? '',
+    department: p.department ?? '',
+    email: p.email ?? '',
+    phone: p.phone ?? '',
+    presence: p.presence,
+    checkIn: p.checkIn ? new Date(p.checkIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : undefined,
+    pending: p.pendingRequests,
+  };
+}

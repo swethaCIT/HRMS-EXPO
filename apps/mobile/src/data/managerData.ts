@@ -57,10 +57,13 @@ export interface TeamMember {
   phone: string;
   presence: Presence;
   checkIn?: string;
-  attendancePct: number;   // 0-100, rolling 30 days
-  leaveBalance: number;    // days
-  utilization: number;     // 0-100 billable
-  performance: number;     // 0-100 last review
+  /* These four are NOT exposed by the API yet. Optional on purpose: screens must
+     render "—" for a missing metric rather than fabricate one (the team roster
+     used to derive them from the array index). */
+  attendancePct?: number;  // 0-100, rolling 30 days
+  leaveBalance?: number;   // days
+  utilization?: number;    // 0-100 billable
+  performance?: number;    // 0-100 last review
   pending: number;         // pending approvals raised by this member
   projects: string[];
 }

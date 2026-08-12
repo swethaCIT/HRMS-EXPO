@@ -55,13 +55,24 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('HRMS API')
-    .setDescription('Human Resource Management System API')
+    .setDescription(
+      'Human Resource Management System API.\n\n' +
+        '**To try these endpoints:** POST `/auth/login` with one of the demo logins ' +
+        '(`admin@hrms.com` / `hr@hrms.com` / `manager@hrms.com` / `employee@hrms.com`, ' +
+        'password `Admin@123`), copy `access_token` from the response, click **Authorize** ' +
+        'and paste it. Everything below is then exercised as that role — endpoints you ' +
+        'lack the role for correctly return 403.',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('api/docs', app, document, {
+    // Keeps the pasted bearer token across page reloads — a docs-UI convenience
+    // only; it changes nothing about how the API itself behaves.
+    swaggerOptions: { persistAuthorization: true, displayRequestDuration: true, tagsSorter: 'alpha' },
+  });
 
   // Drain in-flight requests and close the DB pool cleanly on SIGTERM/SIGINT
   // (rolling deploys, autoscaler scale-down) instead of dropping live requests.
