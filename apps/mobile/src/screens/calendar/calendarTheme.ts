@@ -1,14 +1,24 @@
 /* ════════════════════════════════════════════════════════
-   Team Calendar — shared design tokens, enums and date helpers.
+   Calendar — shared design tokens, enums and date helpers.
    Mirrors apps/backend/src/team-calendar's enums; reuses the app's own
    palette (T from data/managerData) rather than inventing new colors.
    ════════════════════════════════════════════════════════ */
 
 import { T } from '../../data/managerData';
 import { IconName } from '../../components/Icon';
-import { MeetingMode, EventStatus, ResponseStatus, RecurrenceType } from '../../types/calendar';
+import { MeetingMode, EventStatus, ResponseStatus, RecurrenceType, HolidayType } from '../../types/calendar';
 
 export { T };
+
+/* Holiday type palette — public = indigo, optional = amber, company = green.
+ * Matches the retired standalone Holidays screen exactly, so the visual
+ * language carries over into the unified calendar. */
+export const HOLIDAY_TYPE_META: Record<HolidayType, { label: string; bg: string; fg: string; solid: string }> = {
+  public: { label: 'Public', bg: '#EEF2FF', fg: T.primary, solid: T.primary },
+  optional: { label: 'Optional', bg: T.amber.bg, fg: T.amber.fg, solid: T.amber.solid },
+  company: { label: 'Company', bg: T.green.bg, fg: T.green.fg, solid: T.green.solid },
+};
+export const HOLIDAY_TYPE_OPTIONS: HolidayType[] = ['public', 'optional', 'company'];
 
 export const MODE_META: Record<MeetingMode, { label: string; icon: IconName; bg: string; fg: string; solid: string }> = {
   Online: { label: 'Online', icon: 'video', bg: T.blue.bg, fg: T.blue.fg, solid: T.blue.solid },
@@ -83,6 +93,11 @@ export function fmtMonthYear(year: number, month: number): string {
 export function fmtTime(iso: string): string {
   try { return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
   catch { return iso; }
+}
+
+export function fmtWeekday(iso: string): string {
+  try { return new Date(iso).toLocaleDateString('en-US', { weekday: 'long' }); }
+  catch { return ''; }
 }
 
 export function fmtDateLong(iso: string): string {

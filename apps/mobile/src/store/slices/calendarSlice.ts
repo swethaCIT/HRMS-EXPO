@@ -1,8 +1,9 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { calendarApi } from '../../services/api';
+import { calendarApi, holidayApi } from '../../services/api';
 import { getErrorMessage } from '../../utils/errorMessage';
 import {
   CalendarItem,
+  Holiday,
   MeetingDetail,
   MeetingFormPayload,
   ParticipantSearchResult,
@@ -156,6 +157,34 @@ export const rsvpMeeting = createAsyncThunk(
       return data as MeetingDetail;
     } catch (err) {
       return rejectWithValue(getErrorMessage(err, 'Could not update your RSVP'));
+    }
+  },
+);
+
+/* ── Holidays (HR/Admin only — backend enforces via RolesGuard) ── */
+
+export const createHoliday = createAsyncThunk(
+  'calendar/createHoliday',
+  async (payload: { date: string; name: string; type: string; description?: string }, { dispatch, rejectWithValue }) => {
+    try {
+      const { data } = await holidayApi.create(payload);
+      dispatch(invalidateCache());
+      return data as Holiday;
+    } catch (err) {
+      return rejectWithValue(getErrorMessage(err, 'Could not create the holiday'));
+    }
+  },
+);
+
+export const deleteHoliday = createAsyncThunk(
+  'calendar/deleteHoliday',
+  async (id: string, { dispatch, rejectWithValue }) => {
+    try {
+      await holidayApi.remove(id);
+      dispatch(invalidateCache());
+      return id;
+    } catch (err) {
+      return rejectWithValue(getErrorMessage(err, 'Could not delete the holiday'));
     }
   },
 );

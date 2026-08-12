@@ -1,11 +1,11 @@
-/* Small shared building blocks for the Team Calendar screens. */
+/* Small shared building blocks for the Calendar screens. */
 
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Modal } from 'react-native';
 import { avatarColor, initialsOf } from '../../data/managerData';
 import Icon from '../../components/Icon';
-import { EventStatus, MeetingMode, ResponseStatus } from '../../types/calendar';
-import { EVENT_STATUS_META, MODE_META, RSVP_META, T } from './calendarTheme';
+import { EventStatus, HolidayType, MeetingMode, ResponseStatus } from '../../types/calendar';
+import { EVENT_STATUS_META, HOLIDAY_TYPE_META, MODE_META, RSVP_META, T, calendarGrid, fmtMonthYear, isSameDay } from './calendarTheme';
 
 /* ── Indigo screen header with a back arrow, matching the rest of the app ── */
 export function CalendarHeader({
@@ -69,6 +69,15 @@ export function RsvpBadge({ status }: { status: ResponseStatus }) {
   );
 }
 
+export function HolidayTypeBadge({ type }: { type?: HolidayType | string }) {
+  const meta = HOLIDAY_TYPE_META[type as HolidayType] ?? HOLIDAY_TYPE_META.public;
+  return (
+    <View style={[st.pill, { backgroundColor: meta.bg }]}>
+      <Text style={[st.pillTx, { color: meta.fg }]}>{meta.label}</Text>
+    </View>
+  );
+}
+
 export function Avatar({ name, size = 28 }: { name?: string | null; size?: number }) {
   const label = name || '?';
   const assigned = !!name;
@@ -119,6 +128,52 @@ export function OfflineNote({ text = 'Backend unreachable · pull down to retry'
   );
 }
 
+/** Bottom-sheet date picker (single-month calendar, tap a day to select) — shared by the meeting and holiday forms. */
+export function DatePickerSheet({ visible, value, onSelect, onClose }: {
+  visible: boolean; value: Date; onSelect: (d: Date) => void; onClose: () => void;
+}) {
+  const [y, setY] = useState(value.getFullYear());
+  const [m, setM] = useState(value.getMonth());
+  useEffect(() => { if (visible) { setY(value.getFullYear()); setM(value.getMonth()); } }, [visible, value]);
+  const grid = useMemo(() => calendarGrid(y, m), [y, m]);
+  const rows = Array.from({ length: 6 }, (_, i) => grid.slice(i * 7, i * 7 + 7));
+  const today = new Date();
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={ps.overlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={ps.sheet} onPress={(e) => e.stopPropagation()}>
+          <View style={ps.handle} />
+          <View style={ps.nav}>
+            <TouchableOpacity onPress={() => (m === 0 ? (setM(11), setY(y - 1)) : setM(m - 1))} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={ps.navArrow}>‹</Text>
+            </TouchableOpacity>
+            <Text style={ps.navLabel}>{fmtMonthYear(y, m)}</Text>
+            <TouchableOpacity onPress={() => (m === 11 ? (setM(0), setY(y + 1)) : setM(m + 1))} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={ps.navArrow}>›</Text>
+            </TouchableOpacity>
+          </View>
+          {rows.map((row, ri) => (
+            <View key={ri} style={ps.row}>
+              {row.map((cell, ci) => {
+                const isSel = isSameDay(cell.date, value);
+                const isToday = isSameDay(cell.date, today);
+                return (
+                  <TouchableOpacity key={ci} style={ps.cell} onPress={() => { onSelect(cell.date); onClose(); }} disabled={!cell.cur}>
+                    <View style={[ps.circle, isSel && ps.circleSel, !isSel && isToday && ps.circleToday]}>
+                      <Text style={[ps.dayTx, !cell.cur && ps.dayTxFaded, isSel && ps.dayTxSel]}>{cell.date.getDate()}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
 const st = StyleSheet.create({
   header: {
     backgroundColor: T.header, paddingTop: 48, paddingBottom: 16, paddingHorizontal: 16,
@@ -155,4 +210,21 @@ const st = StyleSheet.create({
   },
   offlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: T.amber.solid },
   offlineTx: { fontSize: 12, color: T.amber.fg, fontWeight: '600' },
+});
+
+const ps = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingTop: 12 },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: T.line, alignSelf: 'center', marginBottom: 14 },
+  nav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  navArrow: { fontSize: 24, color: T.ink, fontWeight: '600', paddingHorizontal: 8 },
+  navLabel: { fontSize: 15, fontWeight: '700', color: T.ink },
+  row: { flexDirection: 'row' },
+  cell: { flex: 1, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
+  circle: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  circleSel: { backgroundColor: T.primary },
+  circleToday: { borderWidth: 1.5, borderColor: T.primary },
+  dayTx: { fontSize: 13, color: T.ink },
+  dayTxFaded: { color: '#D1D5DB' },
+  dayTxSel: { color: '#FFF', fontWeight: '700' },
 });

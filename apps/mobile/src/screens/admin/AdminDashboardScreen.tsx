@@ -103,7 +103,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
     { l: 'User Management', sub: 'Roles & access', icon: 'user', go: 'Users', fg: T.primary, bg: '#EEF2FF' },
     { l: 'People', sub: 'Directory', icon: 'users', go: 'People', fg: T.green.solid, bg: T.green.bg },
     { l: 'Insights', sub: 'Analytics', icon: 'bar-chart', go: 'Insights', fg: T.amber.solid, bg: T.amber.bg },
-    { l: 'Team Calendar', sub: 'Meetings', icon: 'calendar', go: 'TeamCalendar', fg: T.purple.solid, bg: T.purple.bg },
+    { l: 'Calendar', sub: 'Meetings', icon: 'calendar', go: 'Calendar', fg: T.purple.solid, bg: T.purple.bg },
   ];
 
   return (

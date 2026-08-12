@@ -1,12 +1,12 @@
 import React, { useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, Alert } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchUpcoming } from '../../store/slices/calendarSlice';
 import { useLivePolling } from '../../utils/useLivePolling';
 import { UpcomingItem } from '../../types/calendar';
-import { EmptyState, ModeBadge } from './components';
-import { T, fmtDateShort, fmtTimeRange, isSameDay } from './calendarTheme';
+import { EmptyState, HolidayTypeBadge, ModeBadge } from './components';
+import { T, dateKeyOf, fmtDateShort, fmtTimeRange, fmtWeekday, isSameDay } from './calendarTheme';
 
 function groupAgenda(items: UpcomingItem[]) {
   const today = new Date();
@@ -32,11 +32,25 @@ function groupAgenda(items: UpcomingItem[]) {
 export default function AgendaScreen({ navigation }: any) {
   const dispatch = useDispatch<AppDispatch>();
   const { upcoming, loading, error } = useSelector((s: RootState) => s.calendar);
+  const role = useSelector((s: RootState) => s.auth.user?.role);
+  const canManageHolidays = role === 'hr' || role === 'admin';
 
   const load = useCallback(() => { dispatch(fetchUpcoming()); }, [dispatch]);
   useLivePolling(load, 20_000);
 
   const groups = useMemo(() => groupAgenda(upcoming), [upcoming]);
+
+  function onCreatePress() {
+    if (!canManageHolidays) {
+      navigation?.navigate('CreateMeeting');
+      return;
+    }
+    Alert.alert('New', undefined, [
+      { text: 'Meeting', onPress: () => navigation?.navigate('CreateMeeting') },
+      { text: 'Holiday', onPress: () => navigation?.navigate('AddHoliday') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
 
   return (
     <View style={s.root}>
@@ -46,12 +60,12 @@ export default function AgendaScreen({ navigation }: any) {
         <TouchableOpacity style={s.iconBtn} onPress={() => navigation?.canGoBack?.() && navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Text style={s.backArrow}>←</Text>
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Team Calendar</Text>
+        <Text style={s.headerTitle}>Calendar</Text>
         <View style={s.iconBtn} />
       </View>
 
       <View style={s.toggleRow}>
-        <TouchableOpacity style={s.toggleChip} onPress={() => navigation?.navigate('TeamCalendar')} activeOpacity={0.85}>
+        <TouchableOpacity style={s.toggleChip} onPress={() => navigation?.navigate('Calendar')} activeOpacity={0.85}>
           <Text style={s.toggleTx}>Month</Text>
         </TouchableOpacity>
         <View style={[s.toggleChip, s.toggleChipActive]}>
@@ -80,24 +94,35 @@ export default function AgendaScreen({ navigation }: any) {
               <View key={g.key} style={s.section}>
                 <Text style={s.sectionTitle}>{g.label.toUpperCase()} · {g.items.length}</Text>
                 <View style={s.card}>
-                  {g.items.map((m, i) => (
-                    <TouchableOpacity
-                      key={`${m.eventId}-${m.startDateTime}`}
-                      style={[s.row, i < g.items.length - 1 && s.rowBorder]}
-                      activeOpacity={0.85}
-                      onPress={() => navigation?.navigate('MeetingDetail', { eventId: m.eventId })}
-                    >
-                      <View style={s.dateChip}>
-                        <Text style={s.dateChipDay}>{new Date(m.startDateTime).getDate()}</Text>
-                        <Text style={s.dateChipMon}>{new Date(m.startDateTime).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={s.rowTitle} numberOfLines={1}>{m.title}</Text>
-                        <Text style={s.rowSub}>{fmtTimeRange(m.startDateTime, m.endDateTime)} · {fmtDateShort(m.startDateTime)}</Text>
-                      </View>
-                      <ModeBadge mode={m.meetingMode} compact />
-                    </TouchableOpacity>
-                  ))}
+                  {g.items.map((m, i) => {
+                    const isHoliday = !!m.isHoliday;
+                    return (
+                      <TouchableOpacity
+                        key={`${m.eventId ?? m.holidayId}-${m.startDateTime}`}
+                        style={[s.row, i < g.items.length - 1 && s.rowBorder]}
+                        activeOpacity={0.85}
+                        onPress={() => isHoliday
+                          ? m.holidayId && navigation?.navigate('HolidayDetail', {
+                              holiday: { id: m.holidayId, date: dateKeyOf(new Date(m.startDateTime)), name: m.title, type: m.type, description: m.description },
+                            })
+                          : navigation?.navigate('MeetingDetail', { eventId: m.eventId })}
+                      >
+                        <View style={[s.dateChip, isHoliday && s.dateChipHoliday]}>
+                          <Text style={[s.dateChipDay, isHoliday && s.dateChipDayHoliday]}>{new Date(m.startDateTime).getDate()}</Text>
+                          <Text style={[s.dateChipMon, isHoliday && s.dateChipDayHoliday]}>{new Date(m.startDateTime).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.rowTitle} numberOfLines={1}>{m.title}</Text>
+                          <Text style={s.rowSub}>
+                            {isHoliday
+                              ? `${fmtWeekday(m.startDateTime)}${m.description ? ` · ${m.description}` : ''}`
+                              : `${fmtTimeRange(m.startDateTime, m.endDateTime)} · ${fmtDateShort(m.startDateTime)}`}
+                          </Text>
+                        </View>
+                        {isHoliday ? <HolidayTypeBadge type={m.type} /> : m.meetingMode && <ModeBadge mode={m.meetingMode} compact />}
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </View>
             ))
@@ -105,8 +130,8 @@ export default function AgendaScreen({ navigation }: any) {
         </ScrollView>
       )}
 
-      <TouchableOpacity style={s.fab} activeOpacity={0.85} onPress={() => navigation?.navigate('CreateMeeting')}>
-        <Text style={s.fabTx}>＋ Schedule Meeting</Text>
+      <TouchableOpacity style={s.fab} activeOpacity={0.85} onPress={onCreatePress}>
+        <Text style={s.fabTx}>{canManageHolidays ? '＋ New' : '＋ Schedule Meeting'}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -143,7 +168,9 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: T.line },
   dateChip: { width: 44, height: 48, borderRadius: 10, borderWidth: 1.5, borderColor: T.primary, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAFAFF' },
+  dateChipHoliday: { borderColor: T.amber.solid, backgroundColor: '#FFFBF2' },
   dateChipDay: { fontSize: 16, fontWeight: '800', color: T.primary },
+  dateChipDayHoliday: { color: T.amber.fg },
   dateChipMon: { fontSize: 9.5, fontWeight: '700', color: T.primary, letterSpacing: 0.4 },
   rowTitle: { fontSize: 14, fontWeight: '700', color: T.ink },
   rowSub: { fontSize: 11.5, color: T.sub, marginTop: 2 },

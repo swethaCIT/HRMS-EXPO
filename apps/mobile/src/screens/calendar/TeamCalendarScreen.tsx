@@ -1,14 +1,14 @@
 import React, { useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, StatusBar, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, StatusBar, ActivityIndicator, Alert } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchRange, setCurrentMonth, setSelectedDate } from '../../store/slices/calendarSlice';
 import { useLivePolling } from '../../utils/useLivePolling';
 import Icon from '../../components/Icon';
 import { CalendarItem } from '../../types/calendar';
-import { EmptyState, ModeBadge } from './components';
+import { EmptyState, HolidayTypeBadge, ModeBadge } from './components';
 import {
-  T, calendarGrid, dateKeyOf, fmtMonthYear, fmtTimeRange, isSameDay,
+  T, calendarGrid, dateKeyOf, fmtMonthYear, fmtTimeRange, fmtWeekday, isSameDay,
   DOT_MEETING, DOT_HOLIDAY, MAX_DOTS_PER_DAY,
 } from './calendarTheme';
 
@@ -19,6 +19,8 @@ const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 export default function TeamCalendarScreen({ navigation }: any) {
   const dispatch = useDispatch<AppDispatch>();
   const { currentMonth, selectedDate, rangeCache, loading, error } = useSelector((s: RootState) => s.calendar);
+  const role = useSelector((s: RootState) => s.auth.user?.role);
+  const canManageHolidays = role === 'hr' || role === 'admin';
 
   const [yearStr, monthStr] = currentMonth.split('-');
   const year = Number(yearStr);
@@ -61,6 +63,18 @@ export default function TeamCalendarScreen({ navigation }: any) {
     dispatch(setSelectedDate(dateKeyOf(today)));
   }
 
+  function onFabPress() {
+    if (!canManageHolidays) {
+      navigation?.navigate('CreateMeeting', { defaultDate: selectedDate });
+      return;
+    }
+    Alert.alert('New', undefined, [
+      { text: 'Meeting', onPress: () => navigation?.navigate('CreateMeeting', { defaultDate: selectedDate }) },
+      { text: 'Holiday', onPress: () => navigation?.navigate('AddHoliday', { defaultDate: selectedDate }) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
   const rows: typeof grid[] = Array.from({ length: 6 }, (_, i) => grid.slice(i * 7, i * 7 + 7));
   const selectedDayItems = selected ? (itemsByDay[dateKeyOf(selected)] ?? []) : [];
   const selectedMeetings = selectedDayItems.filter((i) => !i.isHoliday);
@@ -74,7 +88,7 @@ export default function TeamCalendarScreen({ navigation }: any) {
         <TouchableOpacity style={s.iconBtn} onPress={() => navigation?.canGoBack?.() && navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Text style={s.backArrow}>←</Text>
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Team Calendar</Text>
+        <Text style={s.headerTitle}>Calendar</Text>
         <TouchableOpacity style={s.todayBtn} onPress={goToday}>
           <Text style={s.todayBtnTx}>Today</Text>
         </TouchableOpacity>
@@ -181,11 +195,22 @@ export default function TeamCalendarScreen({ navigation }: any) {
           )}
 
           {selectedHolidays.map((h) => (
-            <View key={h.holidayId} style={s.holidayRow}>
-              <View style={[s.holidayDot]} />
-              <Text style={s.holidayName}>{h.title}</Text>
-              <Text style={s.holidayTag}>Holiday</Text>
-            </View>
+            <TouchableOpacity
+              key={h.holidayId}
+              style={s.holidayRow}
+              activeOpacity={0.85}
+              onPress={() => h.holidayId && navigation?.navigate('HolidayDetail', {
+                holiday: { id: h.holidayId, date: dateKeyOf(new Date(h.startDateTime)), name: h.title, type: h.type, description: h.description },
+              })}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={s.holidayName}>{h.title}</Text>
+                <Text style={s.holidaySub}>
+                  {fmtWeekday(h.startDateTime)}{h.description ? ` · ${h.description}` : ''}
+                </Text>
+              </View>
+              <HolidayTypeBadge type={h.type} />
+            </TouchableOpacity>
           ))}
 
           {selectedMeetings.map((m) => (
@@ -208,7 +233,7 @@ export default function TeamCalendarScreen({ navigation }: any) {
         </View>
       </ScrollView>
 
-      <TouchableOpacity style={s.fab} activeOpacity={0.85} onPress={() => navigation?.navigate('CreateMeeting', { defaultDate: selectedDate })}>
+      <TouchableOpacity style={s.fab} activeOpacity={0.85} onPress={onFabPress}>
         <Icon name="plus" size={24} color="#FFF" strokeWidth={2.6} />
       </TouchableOpacity>
     </View>
@@ -270,10 +295,9 @@ const s = StyleSheet.create({
 
   dayPanelTitle: { fontSize: 14, fontWeight: '800', color: T.ink, marginBottom: 8 },
 
-  holidayRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: T.line },
-  holidayDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: DOT_HOLIDAY },
-  holidayName: { flex: 1, fontSize: 13.5, fontWeight: '700', color: T.ink },
-  holidayTag: { fontSize: 10.5, color: T.amber.fg, fontWeight: '700' },
+  holidayRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: T.line },
+  holidayName: { fontSize: 13.5, fontWeight: '700', color: T.ink },
+  holidaySub: { fontSize: 11.5, color: T.sub, marginTop: 2 },
 
   meetingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: T.line },
   meetingTimeCol: { width: 96 },

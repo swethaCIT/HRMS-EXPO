@@ -208,7 +208,7 @@ export default function ManagerDashboardScreen({ navigation }: any) {
           const [y, m, d] = String(nextHoliday.date).split('-').map(Number);
           const hd = new Date(y, (m || 1) - 1, d || 1);
           return (
-            <TouchableOpacity activeOpacity={0.85} onPress={() => navigation?.navigate('Holidays')} style={st.holidayCard}>
+            <TouchableOpacity activeOpacity={0.85} onPress={() => navigation?.navigate('Calendar')} style={st.holidayCard}>
               <View style={st.holidayChip}>
                 <Text style={st.holidayChipDay}>{hd.getDate()}</Text>
                 <Text style={st.holidayChipMon}>{hd.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</Text>
@@ -267,7 +267,7 @@ export default function ManagerDashboardScreen({ navigation }: any) {
               { e: '💰', l: 'Payslip',      go: 'Payroll' },
               { e: '🕒', l: 'Timesheet',    go: 'Timesheet' },
               { e: '📝', l: 'Request',      go: 'CreateRequest' },
-              { e: '🗓️', l: 'Team Calendar', go: 'TeamCalendar' },
+              { e: '🗓️', l: 'Calendar', go: 'Calendar' },
             ].map((q) => (
               <TouchableOpacity key={q.l} style={st.quickChip} activeOpacity={0.85} onPress={() => navigation?.navigate(q.go)}>
                 <Text style={st.quickEmoji}>{q.e}</Text>

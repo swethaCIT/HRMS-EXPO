@@ -246,10 +246,14 @@ async function main() {
       console.log(`   ↳ ${p.notifications.length} notifications`);
     }
 
-    // a couple of tickets for the employee user
+    // a couple of tickets for the employee user — checked per ticketId (the
+    // column that's actually unique-constrained), not by createdById, so this
+    // stays idempotent even if a demo login gets re-created against a fresh
+    // user row (createdById would change, but the ticketId literal below stays
+    // the same and would otherwise collide on insert).
     if (p.role === UserRole.EMPLOYEE) {
-      const existingTickets = await ticketRepo.count({ where: { createdById: user.id } });
-      if (existingTickets === 0) {
+      const ticket1Exists = await ticketRepo.findOne({ where: { ticketId: 'TKT-1043' } });
+      if (!ticket1Exists) {
         await ticketRepo.save(ticketRepo.create({
           ticketId: 'TKT-1043', subject: 'Laptop not powering on after update',
           dept: 'IT', category: 'Hardware', subCategory: 'Laptop Issue',
@@ -257,6 +261,9 @@ async function main() {
           description: 'Laptop does not power on after the latest Windows update.',
           agent: 'IT Helpdesk', createdById: user.id,
         }));
+      }
+      const ticket2Exists = await ticketRepo.findOne({ where: { ticketId: 'TKT-1039' } });
+      if (!ticket2Exists) {
         await ticketRepo.save(ticketRepo.create({
           ticketId: 'TKT-1039', subject: 'Form 16 for FY 2025-26 not available',
           dept: 'HR', category: 'Payroll & Benefits', subCategory: 'Form 16',
@@ -264,7 +271,9 @@ async function main() {
           description: 'Form 16 is not showing up in the payroll portal.',
           createdById: user.id,
         }));
-        console.log('   ↳ 2 tickets');
+      }
+      if (!ticket1Exists || !ticket2Exists) {
+        console.log('   ↳ tickets seeded');
       }
     }
   }

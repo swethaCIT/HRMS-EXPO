@@ -9,7 +9,7 @@ export type IconName =
   | 'home' | 'tag' | 'calendar' | 'user' | 'users' | 'check-square' | 'bar-chart'
   | 'pie-chart' | 'inbox' | 'briefcase' | 'bell' | 'clock' | 'log-out' | 'box'
   | 'credit-card' | 'shield' | 'help-circle' | 'chevron-right' | 'settings' | 'file-text'
-  | 'hourglass' | 'check'
+  | 'target' | 'headphones' | 'more-horizontal' | 'hourglass' | 'check'
   | 'video' | 'map-pin' | 'link' | 'search' | 'x' | 'plus' | 'chevron-left';
 
 interface Props {
@@ -139,6 +139,24 @@ function render(name: IconName, p: any) {
       </>);
     case 'chevron-right':
       return (<Polyline {...p} points="9 18 15 12 9 6" />);
+    case 'target':
+      return (<>
+        <Circle {...p} cx="12" cy="12" r="9" />
+        <Circle {...p} cx="12" cy="12" r="5.2" />
+        <Circle {...p} cx="12" cy="12" r="1.4" fill={p.stroke} />
+      </>);
+    case 'headphones':
+      return (<>
+        <Path {...p} d="M3 18v-6a9 9 0 0 1 18 0v6" />
+        <Path {...p} d="M21 18.5a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-2.5a2 2 0 0 1 2-2H21z" />
+        <Path {...p} d="M3 18.5a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-2.5a2 2 0 0 0-2-2H3z" />
+      </>);
+    case 'more-horizontal':
+      return (<>
+        <Circle cx="5" cy="12" r="1.6" fill={p.stroke} stroke="none" />
+        <Circle cx="12" cy="12" r="1.6" fill={p.stroke} stroke="none" />
+        <Circle cx="19" cy="12" r="1.6" fill={p.stroke} stroke="none" />
+      </>);
     case 'check':
       return (<Polyline {...p} points="20 6 9 17 4 12" />);
     case 'hourglass':

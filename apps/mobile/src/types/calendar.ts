@@ -6,6 +6,8 @@ export type EventStatus = 'SCHEDULED' | 'CANCELLED' | 'COMPLETED';
 export type ResponseStatus = 'Pending' | 'Accepted' | 'Declined' | 'Tentative';
 /** Settable subset of ResponseStatus — "Pending" is only ever the initial default. */
 export type RsvpStatus = 'Accepted' | 'Declined' | 'Tentative';
+/** Mirrors the Holiday entity's `type` column (stored as a plain string server-side). */
+export type HolidayType = 'public' | 'optional' | 'company';
 
 /** One row from GET /calendar/events?start=&end= — a real meeting occurrence or a merged holiday. */
 export interface CalendarItem {
@@ -18,16 +20,33 @@ export interface CalendarItem {
   status: EventStatus | null;
   isHoliday?: boolean;
   holidayId?: string;
+  /** Only present when isHoliday is true. */
+  type?: HolidayType;
+  description?: string | null;
 }
 
-/** One row from GET /calendar/upcoming. */
+/** One row from GET /calendar/upcoming — a real meeting occurrence or a merged holiday. */
 export interface UpcomingItem {
-  eventId: string;
+  eventId: string | null;
   title: string;
   startDateTime: string;
   endDateTime: string;
-  meetingMode: MeetingMode;
-  status: EventStatus;
+  meetingMode: MeetingMode | null;
+  status: EventStatus | null;
+  isHoliday?: boolean;
+  holidayId?: string;
+  /** Only present when isHoliday is true. */
+  type?: HolidayType;
+  description?: string | null;
+}
+
+/** A holiday as returned by GET /holidays. */
+export interface Holiday {
+  id: string;
+  date: string; // YYYY-MM-DD
+  name: string;
+  type: HolidayType;
+  description?: string | null;
 }
 
 export interface ConflictInfo {

@@ -211,7 +211,7 @@ export const workItemApi = {
   history: (id: string) => api.get(`/work-items/${id}/history`),
 };
 
-/* ── Team Calendar ── */
+/* ── Calendar ── */
 
 export const calendarApi = {
   listRange: (start: string, end: string) => api.get('/calendar/events', { params: { start, end } }),

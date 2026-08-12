@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
@@ -8,9 +8,9 @@ import {
 import { getErrorMessage } from '../../utils/errorMessage';
 import Icon from '../../components/Icon';
 import { MeetingMode, RecurrenceType } from '../../types/calendar';
-import { Avatar, CalendarHeader } from './components';
+import { Avatar, CalendarHeader, DatePickerSheet } from './components';
 import {
-  T, calendarGrid, dateKeyOf, fmtMonthYear, isSameDay, RECURRENCE_META, RECURRENCE_OPTIONS, REMINDER_LABEL,
+  T, dateKeyOf, RECURRENCE_META, RECURRENCE_OPTIONS, REMINDER_LABEL,
 } from './calendarTheme';
 
 const MODE_OPTIONS: MeetingMode[] = ['Online', 'Offline', 'Hybrid'];
@@ -26,50 +26,6 @@ function fmtHM(h: number, m: number): string {
   return `${h12}:${String(m).padStart(2, '0')} ${period}`;
 }
 const TIME_SLOTS: { h: number; m: number }[] = Array.from({ length: 48 }, (_, i) => ({ h: Math.floor(i / 2), m: (i % 2) * 30 }));
-
-/* ── Bottom-sheet date picker (single-month calendar, tap a day to select) ── */
-function DatePickerSheet({ visible, value, onSelect, onClose }: { visible: boolean; value: Date; onSelect: (d: Date) => void; onClose: () => void }) {
-  const [y, setY] = useState(value.getFullYear());
-  const [m, setM] = useState(value.getMonth());
-  useEffect(() => { if (visible) { setY(value.getFullYear()); setM(value.getMonth()); } }, [visible, value]);
-  const grid = useMemo(() => calendarGrid(y, m), [y, m]);
-  const rows = Array.from({ length: 6 }, (_, i) => grid.slice(i * 7, i * 7 + 7));
-  const today = new Date();
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableOpacity style={ps.overlay} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} style={ps.sheet} onPress={(e) => e.stopPropagation()}>
-          <View style={ps.handle} />
-          <View style={ps.nav}>
-            <TouchableOpacity onPress={() => (m === 0 ? (setM(11), setY(y - 1)) : setM(m - 1))} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={ps.navArrow}>‹</Text>
-            </TouchableOpacity>
-            <Text style={ps.navLabel}>{fmtMonthYear(y, m)}</Text>
-            <TouchableOpacity onPress={() => (m === 11 ? (setM(0), setY(y + 1)) : setM(m + 1))} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={ps.navArrow}>›</Text>
-            </TouchableOpacity>
-          </View>
-          {rows.map((row, ri) => (
-            <View key={ri} style={ps.row}>
-              {row.map((cell, ci) => {
-                const isSel = isSameDay(cell.date, value);
-                const isToday = isSameDay(cell.date, today);
-                return (
-                  <TouchableOpacity key={ci} style={ps.cell} onPress={() => { onSelect(cell.date); onClose(); }} disabled={!cell.cur}>
-                    <View style={[ps.circle, isSel && ps.circleSel, !isSel && isToday && ps.circleToday]}>
-                      <Text style={[ps.dayTx, !cell.cur && ps.dayTxFaded, isSel && ps.dayTxSel]}>{cell.date.getDate()}</Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ))}
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
 
 /* ── Bottom-sheet time picker (30-min increments) ── */
 function TimePickerSheet({ visible, hour, minute, onSelect, onClose }: {
@@ -417,17 +373,7 @@ const ps = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingTop: 12 },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: T.line, alignSelf: 'center', marginBottom: 14 },
-  nav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  navArrow: { fontSize: 24, color: T.ink, fontWeight: '600', paddingHorizontal: 8 },
   navLabel: { fontSize: 15, fontWeight: '700', color: T.ink },
-  row: { flexDirection: 'row' },
-  cell: { flex: 1, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
-  circle: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  circleSel: { backgroundColor: T.primary },
-  circleToday: { borderWidth: 1.5, borderColor: T.primary },
-  dayTx: { fontSize: 13, color: T.ink },
-  dayTxFaded: { color: '#D1D5DB' },
-  dayTxSel: { color: '#FFF', fontWeight: '700' },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   timeTx: { fontSize: 14, color: T.ink },
   timeTxOn: { color: T.primary, fontWeight: '700' },

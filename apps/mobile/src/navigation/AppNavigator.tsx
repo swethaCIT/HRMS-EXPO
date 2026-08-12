@@ -36,7 +36,6 @@ import HRInsightsScreen  from '../screens/hr/HRInsightsScreen';
 import AdminDashboardScreen  from '../screens/admin/AdminDashboardScreen';
 import UserManagementScreen  from '../screens/admin/UserManagementScreen';
 import NotificationsScreen   from '../screens/common/NotificationsScreen';
-import HolidaysScreen        from '../screens/common/HolidaysScreen';
 import AnnouncementsScreen   from '../screens/common/AnnouncementsScreen';
 import DocumentsScreen       from '../screens/common/DocumentsScreen';
 import Icon, { IconName }    from '../components/Icon';
@@ -60,12 +59,14 @@ import CreateTeamScreen       from '../screens/projects/CreateTeamScreen';
 import AddTeamMembersScreen   from '../screens/projects/AddTeamMembersScreen';
 import MyWorkItemsScreen      from '../screens/projects/MyWorkItemsScreen';
 
-/* Team Calendar — org-wide meeting scheduling */
+/* Calendar — org-wide meeting scheduling + company holidays */
 import TeamCalendarScreen      from '../screens/calendar/TeamCalendarScreen';
 import AgendaScreen            from '../screens/calendar/AgendaScreen';
 import MeetingDetailScreen     from '../screens/calendar/MeetingDetailScreen';
 import MeetingFormScreen       from '../screens/calendar/MeetingFormScreen';
 import ParticipantPickerScreen from '../screens/calendar/ParticipantPickerScreen';
+import AddHolidayScreen        from '../screens/calendar/AddHolidayScreen';
+import HolidayDetailScreen     from '../screens/calendar/HolidayDetailScreen';
 
 const RootStack = createNativeStackNavigator();
 const Tab       = createBottomTabNavigator();
@@ -114,7 +115,6 @@ const LEAF_SCREENS: [string, React.ComponentType<any>][] = [
   ['Regularization', RegularizationScreen],
   ['TeamMember', TeamMemberDetailScreen],
   ['Notifications', NotificationsScreen],
-  ['Holidays', HolidaysScreen],
   ['Announcements', AnnouncementsScreen],
   ['Documents', DocumentsScreen],
   /* Goals / project management board */
@@ -133,13 +133,15 @@ const LEAF_SCREENS: [string, React.ComponentType<any>][] = [
   ['CreateTeam', CreateTeamScreen],
   ['AddTeamMembers', AddTeamMembersScreen],
   ['MyWorkItems', MyWorkItemsScreen],
-  /* Team Calendar */
-  ['TeamCalendar', TeamCalendarScreen],
+  /* Calendar */
+  ['Calendar', TeamCalendarScreen],
   ['CalendarAgenda', AgendaScreen],
   ['MeetingDetail', MeetingDetailScreen],
   ['CreateMeeting', MeetingFormScreen],
   ['EditMeeting', MeetingFormScreen],
   ['ParticipantPicker', ParticipantPickerScreen],
+  ['AddHoliday', AddHolidayScreen],
+  ['HolidayDetail', HolidayDetailScreen],
 ];
 
 /**

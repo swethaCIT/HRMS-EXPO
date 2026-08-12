@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,27 +10,37 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchNotifications } from '../../store/slices/notificationsSlice';
 import { attendanceApi, leaveApi, announcementApi, holidayApi } from '../../services/api';
 import { useLivePolling } from '../../utils/useLivePolling';
 import Icon from '../../components/Icon';
-import GoalsSection from '../projects/GoalsSection';
-
-const STATUS_BADGE: Record<string, { label: string; bg: string; fg: string }> = {
-  present: { label: 'ON TIME', bg: '#D1FAE5', fg: '#065F46' },
-  late:    { label: 'LATE',    bg: '#FEF3C7', fg: '#92400E' },
-  wfh:     { label: 'WFH',     bg: '#DBEAFE', fg: '#1E40AF' },
-  half_day:{ label: 'HALF DAY',bg: '#FEF3C7', fg: '#92400E' },
-};
-const fmtTime = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : null;
 
 const { width } = Dimensions.get('window');
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const TODAY_INDEX = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
+const WORK_DAY_MINUTES = 8 * 60;
+
+const fmtTime = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : null;
+
+const fmtHM = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+};
+
+const initialsFromName = (name?: string, max = 2) =>
+  (name || '')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, max)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -39,16 +49,42 @@ function getGreeting() {
   return 'Good Evening';
 }
 
-function formatHeaderDate() {
-  return new Date()
-    .toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })
-    .toUpperCase();
-}
-
-function formatCardDate() {
-  return new Date().toLocaleDateString('en-GB', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  });
+/** Simple ring progress indicator built on react-native-svg (already a dependency via Icon). */
+function ProgressRing({
+  progress,
+  size = 92,
+  strokeWidth = 9,
+  color = '#4F46E5',
+  trackColor = '#E5E7EB',
+}: {
+  progress: number;
+  size?: number;
+  strokeWidth?: number;
+  color?: string;
+  trackColor?: string;
+}) {
+  const r = (size - strokeWidth) / 2;
+  const c = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(1, progress));
+  const offset = c * (1 - clamped);
+  return (
+    <Svg width={size} height={size}>
+      <Circle cx={size / 2} cy={size / 2} r={r} stroke={trackColor} strokeWidth={strokeWidth} fill="none" />
+      <Circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        stroke={color}
+        strokeWidth={strokeWidth}
+        fill="none"
+        strokeDasharray={`${c} ${c}`}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        rotation="-90"
+        origin={`${size / 2}, ${size / 2}`}
+      />
+    </Svg>
+  );
 }
 
 export default function DashboardScreen({ navigation }: any) {
@@ -61,7 +97,10 @@ export default function DashboardScreen({ navigation }: any) {
   const [punching, setPunching] = useState(false);
   const [leaveDays, setLeaveDays] = useState<number | null>(null);
   const [announcements, setAnnouncements] = useState<any[]>([]);
-  const [nextHoliday, setNextHoliday] = useState<any>(null);
+  const [holidays, setHolidays] = useState<any[]>([]);
+  const [weekAttendance, setWeekAttendance] = useState<any[]>([]);
+  const [nowTick, setNowTick] = useState(Date.now());
+  const [headerH, setHeaderH] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -77,13 +116,7 @@ export default function DashboardScreen({ navigation }: any) {
       } catch { /* offline */ }
       try {
         const { data } = await holidayApi.list();
-        if (Array.isArray(data)) {
-          const t = new Date(); t.setHours(0, 0, 0, 0);
-          const future = data
-            .filter((h: any) => { const [y, m, d] = (h.date || '').split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1).getTime() >= t.getTime(); })
-            .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
-          setNextHoliday(future[0] || null);
-        }
+        if (Array.isArray(data)) setHolidays(data);
       } catch { /* offline */ }
     })();
   }, []);
@@ -98,6 +131,11 @@ export default function DashboardScreen({ navigation }: any) {
     try { const { data } = await leaveApi.balance(employee.id); setLeaveDays(data?.totalRemaining ?? null); } catch { /* offline */ }
   }, [employee?.id]);
 
+  const loadWeekAttendance = useCallback(async () => {
+    if (!employee?.id) return;
+    try { const { data } = await attendanceApi.getByEmployee(employee.id); if (Array.isArray(data)) setWeekAttendance(data); } catch { /* offline */ }
+  }, [employee?.id]);
+
   // Refetch on focus, then keep polling every 15s while this tab stays open -
   // so a leave approval/rejection from the manager shows up while the
   // employee is looking, not only after they navigate away and back.
@@ -106,17 +144,38 @@ export default function DashboardScreen({ navigation }: any) {
       dispatch(fetchNotifications());
       loadToday();
       loadLeaveBalance();
-    }, [dispatch, loadToday, loadLeaveBalance]),
+      loadWeekAttendance();
+    }, [dispatch, loadToday, loadLeaveBalance, loadWeekAttendance]),
   );
 
   const checkedIn = !!today?.checkIn;
   const checkedOut = !!today?.checkOut;
 
+  // Tick every 30s while a punch-in session is live, so the hours ring/counter advances.
+  useEffect(() => {
+    if (!checkedIn || checkedOut) return;
+    const id = setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, [checkedIn, checkedOut]);
+
+  // Distinguishes "server rejected the request" (show its message), "request
+  // never got a response" (a real connectivity failure), and everything else
+  // (e.g. the app has no API host configured) - a bare catch was showing
+  // "Could not reach the server" for all three, hiding the actual cause.
+  const describePunchError = (error: any): string => {
+    if (error?.response) {
+      const msg = error.response.data?.message;
+      return Array.isArray(msg) ? msg.join('\n') : msg || `Server error (${error.response.status}).`;
+    }
+    if (error?.request) return 'Could not reach the server. Check your connection and try again.';
+    return error?.message || 'Something went wrong.';
+  };
+
   const punchIn = async (mode: 'office' | 'wfh') => {
     if (!employee?.id) return;
     setPunching(true);
     try { await attendanceApi.checkIn(employee.id, mode); await loadToday(); }
-    catch { Alert.alert('Punch failed', 'Could not reach the server.'); }
+    catch (error) { Alert.alert('Punch failed', describePunchError(error)); }
     finally { setPunching(false); }
   };
   const onPunchIn = () => {
@@ -131,32 +190,168 @@ export default function DashboardScreen({ navigation }: any) {
     if (!employee?.id) return;
     setPunching(true);
     try { await attendanceApi.checkOut(employee.id); await loadToday(); }
-    catch { Alert.alert('Punch failed', 'Could not reach the server.'); }
+    catch (error) { Alert.alert('Punch failed', describePunchError(error)); }
     finally { setPunching(false); }
   };
+  const onMore = () => {
+    Alert.alert('More', undefined, [
+      { text: 'General request', onPress: () => navigation?.navigate('CreateRequest') },
+      { text: 'Regularize attendance', onPress: () => navigation?.navigate('Regularization') },
+      { text: 'Documents', onPress: () => navigation?.navigate('Documents') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
-  const initials = user?.email
-    ? (user.email.split('@')[0].substring(0, 2)).toUpperCase()
-    : 'JD';
+  const initials = employee?.firstName
+    ? initialsFromName(`${employee.firstName} ${employee.lastName ?? ''}`)
+    : user?.email
+      ? (user.email.split('@')[0].substring(0, 2)).toUpperCase()
+      : 'JD';
+
+  const subtitleText = [employee?.designation, employee?.department].filter(Boolean).join(' · ');
+  const managerInitials = initialsFromName(employee?.reportingManager);
+  const modeWord = today?.status === 'wfh' ? 'Remote' : 'Office';
+  const headerStatusLabel = checkedIn && !checkedOut
+    ? (modeWord === 'Remote' ? 'Working remotely' : 'In office')
+    : checkedOut ? 'Day complete' : null;
+
+  const elapsedMinutes = useMemo(() => {
+    if (!checkedIn || !today?.checkIn) return 0;
+    const start = new Date(today.checkIn).getTime();
+    const end = checkedOut && today?.checkOut ? new Date(today.checkOut).getTime() : nowTick;
+    return Math.max(0, Math.round((end - start) / 60000));
+  }, [checkedIn, checkedOut, today?.checkIn, today?.checkOut, nowTick]);
+  const ringProgress = elapsedMinutes / WORK_DAY_MINUTES;
+
+  const attendancePill = !checkedIn
+    ? { bg: '#F3F4F6', fg: '#6B7280', dot: '#9CA3AF', label: 'Not checked in' }
+    : !checkedOut
+      ? { bg: '#D1FAE5', fg: '#065F46', dot: '#10B981', label: `Working · ${modeWord}` }
+      : { bg: '#EEF2FF', fg: '#4F46E5', dot: '#4F46E5', label: 'Day complete' };
+
+  // "This week" total = past days from attendance history + today's live session.
+  const weeklyMinutes = useMemo(() => {
+    const now = new Date();
+    const monday = new Date(now); monday.setDate(now.getDate() - TODAY_INDEX); monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); sunday.setHours(23, 59, 59, 999);
+    const todayStr = now.toDateString();
+    const historical = weekAttendance.reduce((sum, rec) => {
+      const d = new Date(rec.date);
+      if (d < monday || d > sunday || d.toDateString() === todayStr) return sum;
+      if (!rec.checkIn || !rec.checkOut) return sum;
+      return sum + Math.max(0, Math.round((new Date(rec.checkOut).getTime() - new Date(rec.checkIn).getTime()) / 60000));
+    }, 0);
+    return historical + elapsedMinutes;
+  }, [weekAttendance, elapsedMinutes]);
+
+  const holidaysThisMonth = useMemo(() => {
+    const now = new Date();
+    return holidays.filter((h: any) => {
+      const [y, m] = String(h.date).split('-').map(Number);
+      return y === now.getFullYear() && (m || 1) - 1 === now.getMonth();
+    }).length;
+  }, [holidays]);
+
+  const nextHoliday = useMemo(() => {
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    const future = holidays
+      .filter((h: any) => { const [y, m, d] = (h.date || '').split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1).getTime() >= t.getTime(); })
+      .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
+    return future[0] || null;
+  }, [holidays]);
+
+  const overviewItems = [
+    {
+      key: 'leave', icon: 'briefcase' as const, label: 'Leave balance',
+      value: leaveDays != null ? `${leaveDays} days left` : '—',
+      iconBg: '#D1FAE5', iconColor: '#059669', bar: '#10B981',
+      onPress: () => navigation?.navigate('ApplyLeave'),
+    },
+    {
+      key: 'attendance', icon: 'check-square' as const, label: 'Attendance',
+      value: '94% this month',
+      iconBg: '#DBEAFE', iconColor: '#2563EB', bar: '#3B82F6',
+      onPress: () => navigation?.navigate('Timesheet'),
+    },
+    {
+      key: 'timesheet', icon: 'hourglass' as const, label: 'Timesheet',
+      value: weeklyMinutes > 0 ? `${fmtHM(weeklyMinutes)} logged this week` : 'Nothing logged yet',
+      iconBg: '#CCFBF1', iconColor: '#0D9488', bar: '#14B8A6',
+      onPress: () => navigation?.navigate('Timesheet'),
+    },
+    {
+      key: 'calendar', icon: 'calendar' as const, label: 'Calendar',
+      value: holidaysThisMonth > 0 ? `${holidaysThisMonth} holiday${holidaysThisMonth > 1 ? 's' : ''} this month` : 'No holidays this month',
+      iconBg: '#E0E7FF', iconColor: '#4F46E5', bar: '#6366F1',
+      onPress: () => navigation?.navigate('Calendar'),
+    },
+  ];
+
+  const quickActions = [
+    { key: 'payslip', icon: 'credit-card' as const, label: 'Payslip', bg: '#DBEAFE', color: '#2563EB', onPress: () => navigation?.navigate('Payroll') },
+    { key: 'assets', icon: 'box' as const, label: 'My assets', bg: '#EDE9FE', color: '#7C3AED', onPress: () => navigation?.navigate('Assets') },
+    { key: 'leave', icon: 'briefcase' as const, label: 'Leave request', bg: '#D1FAE5', color: '#059669', onPress: () => navigation?.navigate('ApplyLeave') },
+    { key: 'calendar', icon: 'calendar' as const, label: 'Calendar', bg: '#E0E7FF', color: '#4F46E5', onPress: () => navigation?.navigate('Calendar') },
+    { key: 'goals', icon: 'target' as const, label: 'Goals', bg: '#EDE9FE', color: '#7C3AED', onPress: () => navigation?.navigate('Projects') },
+    { key: 'support', icon: 'headphones' as const, label: 'Support tickets', bg: '#FFEDD5', color: '#EA580C', onPress: () => navigation?.navigate('MyTickets') },
+    { key: 'more', icon: 'more-horizontal' as const, label: 'More', bg: '#F3F4F6', color: '#4B5563', onPress: onMore },
+  ];
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
+      <StatusBar barStyle="light-content" backgroundColor="#162456" />
 
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerDate}>{formatHeaderDate()}</Text>
-          <Text style={styles.headerGreeting}>{getGreeting()} 👋</Text>
-        </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.bellWrap} onPress={() => navigation?.navigate('Notifications')}>
-            <Icon name="bell" size={18} color="#FFFFFF" />
-            {unread > 0 && <View style={styles.bellDot} />}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.avatar} onPress={() => navigation?.navigate('Profile')} activeOpacity={0.8}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </TouchableOpacity>
+      {/* ── Header ──
+          The gradient is sized in real pixels from onLayout rather than percentage,
+          because percentage width/height on react-native-svg doesn't reliably track
+          an auto-height parent (the header's height depends on which optional lines
+          - subtitle, "reports to" - render), which left the gradient clipped short. */}
+      <View style={styles.header} onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}>
+        {headerH > 0 && (
+          <Svg style={StyleSheet.absoluteFill} width={width} height={headerH}>
+            <Defs>
+              <LinearGradient id="hdrGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <Stop offset="0%" stopColor="#141E46" stopOpacity="1" />
+                <Stop offset="100%" stopColor="#3B5BDB" stopOpacity="1" />
+              </LinearGradient>
+            </Defs>
+            <Rect x="0" y="0" width={width} height={headerH} fill="url(#hdrGrad)" />
+          </Svg>
+        )}
+
+        <View style={styles.headerTop}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerGreeting}>
+              {getGreeting()}{employee?.firstName ? `, ${employee.firstName}` : ''}
+            </Text>
+            {!!subtitleText && <Text style={styles.headerSubtitle}>{subtitleText}</Text>}
+            {!!employee?.reportingManager && (
+              <View style={styles.reportsRow}>
+                <View style={styles.reportsAvatar}>
+                  <Text style={styles.reportsAvatarTx}>{managerInitials}</Text>
+                </View>
+                <Text style={styles.reportsText} numberOfLines={1}>
+                  Reports to <Text style={styles.reportsName}>{employee.reportingManager}</Text>
+                </Text>
+                {!!headerStatusLabel && (
+                  <View style={styles.reportsStatusWrap}>
+                    <Text style={styles.reportsDotSep}>·</Text>
+                    <View style={styles.reportsStatusDot} />
+                    <Text style={styles.reportsStatus}>{headerStatusLabel}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.bellWrap} onPress={() => navigation?.navigate('Notifications')}>
+              <Icon name="bell" size={18} color="#FFFFFF" />
+              {unread > 0 && <View style={styles.bellDot} />}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.avatar} onPress={() => navigation?.navigate('Profile')} activeOpacity={0.8}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -165,65 +360,185 @@ export default function DashboardScreen({ navigation }: any) {
         contentContainerStyle={styles.bodyContent}
         showsVerticalScrollIndicator={false}
       >
+        <Text style={styles.dayIntroTitle}>Today</Text>
+
         {/* ── Attendance Card ── */}
         <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Today's Attendance</Text>
-            <Text style={styles.cardDate}>{formatCardDate()}</Text>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardTitle}>Today's attendance</Text>
+            <View style={[styles.statusPill, { backgroundColor: attendancePill.bg }]}>
+              <View style={[styles.statusPillDot, { backgroundColor: attendancePill.dot }]} />
+              <Text style={[styles.statusPillText, { color: attendancePill.fg }]}>{attendancePill.label}</Text>
+            </View>
           </View>
 
-          <View style={styles.punchRow}>
-            {/* Punch In */}
-            <View style={styles.punchBox}>
-              <View style={styles.punchIconWrap}><Text style={styles.punchEmoji}>🕐</Text></View>
-              <Text style={styles.punchLabel}>Punch In</Text>
-              {checkedIn ? (
-                <>
-                  <Text style={[styles.punchTime, { color: '#10B981' }]}>{fmtTime(today.checkIn)}</Text>
-                  <View style={[styles.badgeGreen, { backgroundColor: (STATUS_BADGE[today.status] ?? STATUS_BADGE.present).bg }]}>
-                    <Text style={[styles.badgeGreenText, { color: (STATUS_BADGE[today.status] ?? STATUS_BADGE.present).fg }]}>
-                      {(STATUS_BADGE[today.status] ?? STATUS_BADGE.present).label}
-                    </Text>
-                  </View>
-                </>
-              ) : (
-                <TouchableOpacity style={styles.punchBtn} onPress={onPunchIn} disabled={punching} activeOpacity={0.85}>
-                  {punching ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.punchBtnTx}>Tap to Punch In</Text>}
-                </TouchableOpacity>
-              )}
+          <View style={styles.attendanceBody}>
+            <View style={styles.ringWrap}>
+              <ProgressRing progress={ringProgress} />
+              <View style={styles.ringCenter} pointerEvents={checkedIn ? 'none' : 'auto'}>
+                {checkedIn ? (
+                  <>
+                    <Text style={styles.ringTimeText}>{fmtHM(elapsedMinutes)}</Text>
+                    <Text style={styles.ringOfText}>of 8h</Text>
+                  </>
+                ) : (
+                  <TouchableOpacity onPress={onPunchIn} disabled={punching} activeOpacity={0.8} style={styles.ringPunchBtn}>
+                    {punching ? <ActivityIndicator color="#4F46E5" size="small" /> : <Icon name="clock" size={22} color="#4F46E5" />}
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
-            <View style={styles.punchDivider} />
+            <View style={styles.punchList}>
+              <View style={styles.punchListRow}>
+                <View style={[styles.punchDotOuter, checkedIn && styles.punchDotOuterBlue]}>
+                  {checkedIn && <View style={styles.punchDotInnerBlue} />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.punchListLabel}>PUNCH IN</Text>
+                  <Text style={styles.punchListTime}>{checkedIn ? fmtTime(today.checkIn) : '— : —'}</Text>
+                </View>
+              </View>
 
-            {/* Punch Out */}
-            <View style={styles.punchBox}>
-              <View style={styles.punchIconWrap}><Text style={styles.punchEmoji}>📤</Text></View>
-              <Text style={styles.punchLabel}>Punch Out</Text>
-              {checkedOut ? (
-                <>
-                  <Text style={[styles.punchTime, { color: '#EF4444' }]}>{fmtTime(today.checkOut)}</Text>
-                  <View style={[styles.badgeGreen, { backgroundColor: '#F3F4F6' }]}><Text style={[styles.badgeGreenText, { color: '#6B7280' }]}>DONE</Text></View>
-                </>
-              ) : checkedIn ? (
-                <TouchableOpacity style={[styles.punchBtn, { backgroundColor: '#EF4444' }]} onPress={onPunchOut} disabled={punching} activeOpacity={0.85}>
-                  {punching ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.punchBtnTx}>Tap to Punch Out</Text>}
-                </TouchableOpacity>
-              ) : (
-                <>
-                  <Text style={[styles.punchTime, { color: '#9CA3AF' }]}>{'-- : --'}</Text>
-                  <View style={styles.badgeOrange}><Text style={styles.badgeOrangeText}>PENDING</Text></View>
-                </>
-              )}
+              <View style={styles.punchListRow}>
+                <View style={[styles.punchDotOuter, checkedOut && styles.punchDotOuterRed]}>
+                  {checkedOut && <View style={styles.punchDotInnerRed} />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.punchListLabel}>PUNCH OUT</Text>
+                  {checkedOut ? (
+                    <Text style={styles.punchListTime}>{fmtTime(today.checkOut)}</Text>
+                  ) : checkedIn ? (
+                    <TouchableOpacity onPress={onPunchOut} disabled={punching} activeOpacity={0.8}>
+                      {punching ? <ActivityIndicator size="small" color="#EF4444" /> : <Text style={styles.punchListAction}>Tap to punch out</Text>}
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={styles.punchListTimeMuted}>Not yet</Text>
+                  )}
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {!checkedIn && (
+            <TouchableOpacity style={styles.punchInCta} onPress={onPunchIn} disabled={punching} activeOpacity={0.85}>
+              {punching ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.punchInCtaTx}>Tap to Punch In</Text>}
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* ── Work overview ── */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Work overview</Text>
+            <TouchableOpacity>
+              <Text style={styles.seeAll}>See all</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.overviewGrid}>
+            {overviewItems.map((item) => (
+              <TouchableOpacity key={item.key} style={styles.overviewCard} activeOpacity={0.8} onPress={item.onPress}>
+                <View style={[styles.overviewIconCircle, { backgroundColor: item.iconBg }]}>
+                  <Icon name={item.icon} size={18} color={item.iconColor} />
+                </View>
+                <View style={[styles.overviewBar, { backgroundColor: item.bar }]} />
+                <Text style={styles.overviewLabel}>{item.label}</Text>
+                <Text style={styles.overviewValue} numberOfLines={2}>{item.value}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* ── Quick Actions ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Quick actions</Text>
+          <View style={styles.quickGrid}>
+            {quickActions.map((item) => (
+              <TouchableOpacity key={item.key} style={styles.quickItem} activeOpacity={0.75} onPress={item.onPress}>
+                <View style={[styles.quickIconCircle, { backgroundColor: item.bg }]}>
+                  <Icon name={item.icon} size={20} color={item.color} />
+                </View>
+                <Text style={styles.quickLabel} numberOfLines={1}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* ── This Week ── */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>This week</Text>
+            <Text style={styles.timelineLink}>Timeline view</Text>
+          </View>
+          <View style={styles.weekCard}>
+            <View style={styles.weekRow}>
+              {DAYS.map((day, i) => {
+                const isPast = i < TODAY_INDEX;
+                const isToday = i === TODAY_INDEX;
+                return (
+                  <View key={day} style={styles.dayCol}>
+                    <Text style={[styles.dayLabel, isToday && styles.dayLabelActive]}>{day}</Text>
+                    {isPast ? (
+                      <View style={styles.dayCircleDone}>
+                        <Icon name="check" size={12} color="#FFFFFF" strokeWidth={3} />
+                      </View>
+                    ) : isToday ? (
+                      <View style={styles.dayCircleToday}>
+                        <View style={styles.dayCircleTodayDot} />
+                      </View>
+                    ) : (
+                      <View style={styles.dayCircleFuture} />
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+            <View style={styles.todayChipRow}>
+              {DAYS.map((day, i) => (
+                <View key={day} style={styles.todayChipSlot}>
+                  {i === TODAY_INDEX && (
+                    <View style={styles.todayChip}><Text style={styles.todayChipTx}>Today</Text></View>
+                  )}
+                </View>
+              ))}
             </View>
           </View>
         </View>
 
+        {/* ── Upcoming Holiday ── */}
+        {nextHoliday && (() => {
+          const [y, m, d] = String(nextHoliday.date).split('-').map(Number);
+          const hd = new Date(y, (m || 1) - 1, d || 1);
+          const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
+          const daysLeft = Math.round((hd.getTime() - todayMid.getTime()) / 86400000);
+          const fullDate = hd.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+          return (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => navigation?.navigate('Calendar')}
+              style={[styles.holidayCard, styles.lastSection]}
+            >
+              <View style={styles.holidayAccent} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.holidayLabel}>UPCOMING HOLIDAY</Text>
+                <Text style={styles.holidayName} numberOfLines={1}>{nextHoliday.name}</Text>
+                <Text style={styles.holidayDate}>{fullDate}</Text>
+              </View>
+              <View style={styles.holidayDaysWrap}>
+                <Text style={styles.holidayDaysNum}>{daysLeft}</Text>
+                <Text style={styles.holidayDaysLabel}>DAYS LEFT</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })()}
+
         {/* ── Announcements ── */}
-        <View style={styles.section}>
+        <View style={[styles.section, styles.lastSection]}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>ANNOUNCEMENTS</Text>
+            <Text style={styles.sectionTitle}>Announcements</Text>
             <TouchableOpacity onPress={() => navigation?.navigate('Announcements')}>
-              <Text style={styles.seeAll}>See all ›</Text>
+              <Text style={styles.seeAll}>See all</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.card}>
@@ -247,121 +562,6 @@ export default function DashboardScreen({ navigation }: any) {
             )}
           </View>
         </View>
-
-        {/* ── Upcoming Holiday ── */}
-        {nextHoliday && (() => {
-          const [y, m, d] = String(nextHoliday.date).split('-').map(Number);
-          const hd = new Date(y, (m || 1) - 1, d || 1);
-          return (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => navigation?.navigate('Holidays')}
-              style={styles.holidayCard}
-            >
-              <View style={styles.holidayChip}>
-                <Text style={styles.holidayChipDay}>{hd.getDate()}</Text>
-                <Text style={styles.holidayChipMon}>{hd.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.holidayLabel}>UPCOMING HOLIDAY</Text>
-                <Text style={styles.holidayName} numberOfLines={1}>{nextHoliday.name}</Text>
-              </View>
-              <Icon name="chevron-right" size={20} color="#9CA3AF" />
-            </TouchableOpacity>
-          );
-        })()}
-
-        {/* ── My Overview ── */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>MY OVERVIEW</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAll}>See All</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.overviewGrid}>
-            {[
-              { emoji: '📅', label: 'Leave Balance', value: leaveDays != null ? `${leaveDays} Days` : '—', bg: '#EFF6FF', iconBg: '#DBEAFE' },
-              { emoji: '📊', label: 'Attendance',    value: '94%',     bg: '#EFF6FF', iconBg: '#DBEAFE' },
-              { emoji: '💻', label: 'My Assets',     value: '03',      bg: '#EFF6FF', iconBg: '#DBEAFE' },
-              { emoji: '🎧', label: 'Support',       value: 'Ticket',  bg: '#FFF7ED', iconBg: '#FED7AA' },
-            ].map((item) => (
-              <TouchableOpacity
-                key={item.label}
-                style={[styles.overviewCard, { backgroundColor: item.bg }]}
-                activeOpacity={0.8}
-                onPress={() => item.label === 'My Assets' && navigation?.navigate('Assets')}
-              >
-                <View style={[styles.overviewIconCircle, { backgroundColor: item.iconBg }]}>
-                  <Text style={styles.overviewEmoji}>{item.emoji}</Text>
-                </View>
-                <Text style={styles.overviewLabel}>{item.label}</Text>
-                <Text style={styles.overviewValue}>{item.value}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* ── Goals (project boards) ── */}
-        <GoalsSection navigation={navigation} />
-
-        {/* ── Quick Actions ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
-          <View style={styles.quickRow}>
-            {[
-              { emoji: '💳', label: 'Payslip' },
-              { emoji: '⏱',  label: 'Timesheet' },
-              { emoji: '📦', label: 'Assets' },
-              { emoji: '📝', label: 'Request' },
-              { emoji: '⏱️', label: 'Regularize' },
-            ].map((item) => (
-              <TouchableOpacity
-                key={item.label}
-                style={styles.quickChip}
-                activeOpacity={0.8}
-                onPress={() => {
-                  if (item.label === 'Assets')     navigation?.navigate('Assets');
-                  if (item.label === 'Payslip')    navigation?.navigate('Payroll');
-                  if (item.label === 'Timesheet')  navigation?.navigate('Timesheet');
-                  if (item.label === 'Request')    navigation?.navigate('CreateRequest');
-                  if (item.label === 'Regularize') navigation?.navigate('Regularization');
-                }}
-              >
-                <Text style={styles.quickEmoji}>{item.emoji}</Text>
-                <Text style={styles.quickLabel}>{item.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* ── This Week ── */}
-        <View style={[styles.section, styles.lastSection]}>
-          <Text style={styles.sectionTitle}>THIS WEEK</Text>
-          <View style={styles.weekRow}>
-            {DAYS.map((day, i) => {
-              const isPast    = i < TODAY_INDEX;
-              const isToday   = i === TODAY_INDEX;
-              const isFuture  = i > TODAY_INDEX;
-              return (
-                <View key={day} style={styles.dayCol}>
-                  <Text style={[styles.dayLabel, isToday && styles.dayLabelActive]}>
-                    {day}
-                  </Text>
-                  <View
-                    style={[
-                      styles.dayDot,
-                      isPast   && styles.dotGreen,
-                      isToday  && styles.dotBlue,
-                      isFuture && styles.dotGray,
-                    ]}
-                  />
-                </View>
-              );
-            })}
-          </View>
-        </View>
       </ScrollView>
     </View>
   );
@@ -375,26 +575,50 @@ const styles = StyleSheet.create({
 
   /* Header */
   header: {
-    backgroundColor: '#1E1B4B',
     paddingTop: 48,
-    paddingBottom: 24,
+    paddingBottom: 20,
     paddingHorizontal: 20,
+    overflow: 'hidden',
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerDate: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.6)',
-    letterSpacing: 0.8,
-    fontWeight: '500',
+    alignItems: 'flex-start',
   },
   headerGreeting: {
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginTop: 2,
   },
+  headerSubtitle: {
+    fontSize: 12.5,
+    color: 'rgba(255,255,255,0.75)',
+    marginTop: 3,
+  },
+  reportsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    flexWrap: 'wrap',
+  },
+  reportsAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  reportsAvatarTx: { color: '#FFFFFF', fontSize: 8.5, fontWeight: '700' },
+  reportsText: { fontSize: 12, color: 'rgba(255,255,255,0.8)' },
+  reportsName: { fontWeight: '700', color: '#FFFFFF' },
+  reportsStatusWrap: { flexDirection: 'row', alignItems: 'center' },
+  reportsDotSep: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginHorizontal: 4 },
+  reportsStatusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#34D399', marginRight: 4 },
+  reportsStatus: { fontSize: 12, color: 'rgba(255,255,255,0.9)', fontWeight: '600' },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -404,11 +628,10 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bellEmoji: { fontSize: 16 },
   bellDot: {
     position: 'absolute',
     top: 6,
@@ -424,11 +647,11 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#4F46E5',
+    backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.4)',
   },
   avatarText: {
     color: '#FFF',
@@ -439,6 +662,8 @@ const styles = StyleSheet.create({
   /* Body */
   body: { flex: 1 },
   bodyContent: { padding: 16, paddingBottom: 24 },
+
+  dayIntroTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 10 },
 
   /* Card */
   card: {
@@ -452,59 +677,54 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
-  cardHeader: {
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
+    gap: 8,
   },
   cardTitle: { fontSize: 15, fontWeight: '700', color: '#1F2937' },
-  cardDate:  { fontSize: 12, color: '#6B7280' },
-
-  /* Punch */
-  punchRow: {
+  statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  punchBox: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 4,
-  },
-  punchDivider: {
-    width: 1,
-    height: 80,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 8,
-  },
-  punchIconWrap: {
-    width: 40,
-    height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 5,
   },
-  punchEmoji:  { fontSize: 18 },
-  punchLabel:  { fontSize: 12, color: '#6B7280', fontWeight: '500' },
-  punchTime:   { fontSize: 20, fontWeight: '700', marginVertical: 2 },
-  badgeGreen: {
-    backgroundColor: '#D1FAE5',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  statusPillDot: { width: 6, height: 6, borderRadius: 3 },
+  statusPillText: { fontSize: 11, fontWeight: '700' },
+
+  /* Attendance body: ring + punch list */
+  attendanceBody: { flexDirection: 'row', alignItems: 'center' },
+  ringWrap: { width: 92, height: 92, alignItems: 'center', justifyContent: 'center' },
+  ringCenter: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  ringPunchBtn: { alignItems: 'center', justifyContent: 'center' },
+  ringTimeText: { fontSize: 15, fontWeight: '800', color: '#1F2937' },
+  ringOfText: { fontSize: 10, color: '#9CA3AF', marginTop: 1 },
+
+  punchList: { flex: 1, marginLeft: 24, gap: 18 },
+  punchListRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  punchDotOuter: {
+    width: 14, height: 14, borderRadius: 7,
+    borderWidth: 2, borderColor: '#E5E7EB',
+    alignItems: 'center', justifyContent: 'center',
   },
-  badgeGreenText:  { color: '#065F46', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  badgeOrange: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  punchDotOuterBlue: { borderColor: '#4F46E5' },
+  punchDotOuterRed: { borderColor: '#EF4444' },
+  punchDotInnerBlue: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4F46E5' },
+  punchDotInnerRed: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' },
+  punchListLabel: { fontSize: 10.5, color: '#9CA3AF', fontWeight: '700', letterSpacing: 0.6 },
+  punchListTime: { fontSize: 15, fontWeight: '700', color: '#1F2937', marginTop: 1 },
+  punchListTimeMuted: { fontSize: 15, fontWeight: '700', color: '#9CA3AF', marginTop: 1 },
+  punchListAction: { fontSize: 13, fontWeight: '700', color: '#4F46E5', marginTop: 2 },
+
+  punchInCta: {
+    marginTop: 16, backgroundColor: '#4F46E5', borderRadius: 10,
+    paddingVertical: 12, alignItems: 'center', justifyContent: 'center',
   },
-  badgeOrangeText: { color: '#92400E', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  punchBtn: { backgroundColor: '#4F46E5', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, marginTop: 4, minWidth: 120, alignItems: 'center', justifyContent: 'center', minHeight: 34 },
-  punchBtnTx: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+  punchInCtaTx: { color: '#FFF', fontSize: 14, fontWeight: '700' },
 
   /* Section */
   section: { marginBottom: 16 },
@@ -516,34 +736,35 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#374151',
-    letterSpacing: 0.8,
+    color: '#111827',
     marginBottom: 12,
   },
-  seeAll: { fontSize: 12, color: '#4F46E5', fontWeight: '600' },
+  seeAll: { fontSize: 12.5, color: '#4F46E5', fontWeight: '600' },
+  timelineLink: { fontSize: 12.5, color: '#9CA3AF', fontWeight: '600' },
 
-  /* Announcements + Holiday (dashboard cards) */
+  /* Announcements */
   annRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   annDivider: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   annPin: { fontSize: 16 },
   annTitle: { fontSize: 14, fontWeight: '700', color: '#1F2937' },
   annBody: { fontSize: 12, color: '#6B7280', marginTop: 1 },
   annEmpty: { fontSize: 13, color: '#9CA3AF', paddingVertical: 8, textAlign: 'center' },
+
+  /* Upcoming Holiday */
   holidayCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF',
-    borderRadius: 16, padding: 14, marginBottom: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#FFF',
+    borderRadius: 16, padding: 14, marginBottom: 16, overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
   },
-  holidayChip: {
-    width: 46, height: 50, borderRadius: 12, borderWidth: 1.5, borderColor: '#4F46E5',
-    backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center',
-  },
-  holidayChipDay: { fontSize: 18, fontWeight: '800', color: '#4F46E5' },
-  holidayChipMon: { fontSize: 9.5, fontWeight: '700', color: '#4F46E5', letterSpacing: 0.5 },
+  holidayAccent: { width: 4, alignSelf: 'stretch', borderRadius: 2, backgroundColor: '#10B981' },
   holidayLabel: { fontSize: 10.5, fontWeight: '700', color: '#9CA3AF', letterSpacing: 0.8 },
-  holidayName: { fontSize: 15, fontWeight: '700', color: '#1F2937', marginTop: 2 },
+  holidayName: { fontSize: 15, fontWeight: '700', color: '#1F2937', marginTop: 3 },
+  holidayDate: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  holidayDaysWrap: { alignItems: 'center' },
+  holidayDaysNum: { fontSize: 20, fontWeight: '800', color: '#4F46E5' },
+  holidayDaysLabel: { fontSize: 9, fontWeight: '700', color: '#9CA3AF', letterSpacing: 0.5, marginTop: 1 },
 
   /* Overview Grid */
   overviewGrid: {
@@ -555,8 +776,9 @@ const styles = StyleSheet.create({
     width: (width - 44) / 2,
     borderRadius: 14,
     padding: 14,
+    backgroundColor: '#FFF',
     shadowColor: '#000',
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
   },
@@ -568,36 +790,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 10,
   },
-  overviewEmoji: { fontSize: 18 },
+  overviewBar: { width: 22, height: 3, borderRadius: 2, marginBottom: 8 },
   overviewLabel: { fontSize: 12, color: '#6B7280', marginBottom: 4 },
-  overviewValue: { fontSize: 20, fontWeight: '800', color: '#1F2937' },
+  overviewValue: { fontSize: 14, fontWeight: '800', color: '#1F2937' },
 
   /* Quick Actions */
-  quickRow: {
+  quickGrid: {
     flexDirection: 'row',
-    gap: 10,
+    flexWrap: 'wrap',
   },
-  quickChip: {
-    flex: 1,
-    flexDirection: 'row',
+  quickItem: {
+    width: '33.33%',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 8,
+  },
+  quickIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    paddingVertical: 12,
-    gap: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  quickEmoji: { fontSize: 16 },
-  quickLabel: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  quickLabel: { fontSize: 11.5, fontWeight: '600', color: '#374151', textAlign: 'center' },
 
   /* This Week */
-  weekRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  weekCard: {
     backgroundColor: '#FFF',
     borderRadius: 14,
     paddingVertical: 14,
@@ -607,11 +825,27 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  dayCol: { alignItems: 'center', gap: 6 },
+  weekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dayCol: { alignItems: 'center', gap: 8, flex: 1 },
   dayLabel: { fontSize: 11, fontWeight: '600', color: '#9CA3AF' },
   dayLabelActive: { color: '#4F46E5', fontWeight: '700' },
-  dayDot: { width: 10, height: 10, borderRadius: 5 },
-  dotGreen:  { backgroundColor: '#10B981' },
-  dotBlue:   { backgroundColor: '#4F46E5' },
-  dotGray:   { backgroundColor: '#E5E7EB' },
+  dayCircleDone: {
+    width: 22, height: 22, borderRadius: 11, backgroundColor: '#10B981',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dayCircleToday: {
+    width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#4F46E5',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dayCircleTodayDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4F46E5' },
+  dayCircleFuture: {
+    width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#E5E7EB',
+  },
+  todayChipRow: { flexDirection: 'row', marginTop: 8 },
+  todayChipSlot: { flex: 1, alignItems: 'center' },
+  todayChip: { backgroundColor: '#EEF2FF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  todayChipTx: { fontSize: 9.5, fontWeight: '700', color: '#4F46E5' },
 });

@@ -48,15 +48,23 @@ export interface RangeItem {
   status: EventStatus | null;
   isHoliday?: boolean;
   holidayId?: string;
+  /** Holiday classification (public|optional|company) — only present on holiday rows. */
+  type?: string;
+  /** Holiday description — only present on holiday rows. */
+  description?: string | null;
 }
 
 export interface UpcomingItem {
-  eventId: string;
+  eventId: string | null;
   title: string;
   startDateTime: Date;
   endDateTime: Date;
-  meetingMode: MeetingMode;
-  status: EventStatus;
+  meetingMode: MeetingMode | null;
+  status: EventStatus | null;
+  isHoliday?: boolean;
+  holidayId?: string;
+  type?: string;
+  description?: string | null;
 }
 
 const UPCOMING_HORIZON_DAYS = 30;
@@ -189,6 +197,8 @@ export class TeamCalendarService {
           status: null,
           isHoliday: true,
           holidayId: holiday.id,
+          type: holiday.type,
+          description: holiday.description,
         });
       }
     }
@@ -256,6 +266,28 @@ export class TeamCalendarService {
         });
       }
     }
+
+    // Holiday overlay, same as findRange(): holidays apply company-wide, so this
+    // is intentionally NOT filtered by employeeIds like the meetings above are.
+    const holidays = await this.holidaysService.findAll();
+    for (const holiday of holidays) {
+      const date = new Date(holiday.date);
+      if (date >= now && date <= horizon) {
+        items.push({
+          eventId: null,
+          title: holiday.name,
+          startDateTime: date,
+          endDateTime: date,
+          meetingMode: null,
+          status: null,
+          isHoliday: true,
+          holidayId: holiday.id,
+          type: holiday.type,
+          description: holiday.description,
+        });
+      }
+    }
+
     items.sort((a, b) => a.startDateTime.getTime() - b.startDateTime.getTime());
     return items.slice(0, UPCOMING_MAX_RESULTS);
   }
