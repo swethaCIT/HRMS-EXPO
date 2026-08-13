@@ -84,7 +84,7 @@ export class RegularizationsService {
       if (!user?.id) return;
       await this.notifications.createForUser(user.id, title, body, NotificationType.SYSTEM);
       if (user.email) await this.mail.send(user.email, title, body);
-      if (user.fcmToken) await this.notifications.sendToDevice(user.fcmToken, title, body, { type: 'regularization', regularizationId: reg.id });
+      if (user.expoPushToken) await this.notifications.sendToDevice(user.expoPushToken, title, body, { type: 'regularization', regularizationId: reg.id });
     } catch (err: any) {
       this.logger.error(`Failed to notify on regularization decision: ${err?.message}`);
     }
@@ -103,13 +103,13 @@ export class RegularizationsService {
       const applicantSubject = 'Regularization request submitted';
       const applicantBody = `Your attendance correction for ${when} (${times}) has been submitted and is pending approval.`;
       if (applicantUser?.email) await this.mail.send(applicantUser.email, applicantSubject, applicantBody);
-      if (applicantUser?.fcmToken) await this.notifications.sendToDevice(applicantUser.fcmToken, applicantSubject, applicantBody, { type: 'regularization', regularizationId: reg.id });
+      if (applicantUser?.expoPushToken) await this.notifications.sendToDevice(applicantUser.expoPushToken, applicantSubject, applicantBody, { type: 'regularization', regularizationId: reg.id });
 
       const approvers = await this.users.findApprovers([UserRole.MANAGER, UserRole.HR, UserRole.ADMIN]);
       const approverSubject = 'New regularization request pending approval';
       const approverBody = `${applicantName} requested an attendance correction for ${when} (${times}). Review it in the Approvals inbox.`;
       await Promise.all(approvers.map((a) => this.mail.send(a.email, approverSubject, approverBody)));
-      const approverTokens = approvers.map((a) => a.fcmToken).filter((t): t is string => !!t);
+      const approverTokens = approvers.map((a) => a.expoPushToken).filter((t): t is string => !!t);
       await this.notifications.sendToMultiple(approverTokens, approverSubject, approverBody, { type: 'regularization', regularizationId: reg.id });
     } catch (err: any) {
       this.logger.error(`Failed to send regularization-applied email: ${err?.message}`);

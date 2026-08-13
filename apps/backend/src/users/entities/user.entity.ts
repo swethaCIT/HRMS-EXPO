@@ -27,7 +27,7 @@ export class User {
   isActive: boolean;
 
   @Column({ nullable: true })
-  fcmToken: string;
+  expoPushToken: string;
 
   // Password reset (bcrypt hash of a one-time token + its expiry)
   @Column({ nullable: true })

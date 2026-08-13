@@ -117,8 +117,8 @@ export class UsersService {
     return updated;
   }
 
-  async updateFcmToken(id: string, token: string): Promise<void> {
-    await this.userRepo.update(id, { fcmToken: token });
+  async updateExpoPushToken(id: string, token: string): Promise<void> {
+    await this.userRepo.update(id, { expoPushToken: token });
   }
 
   /* ── Password reset ── */

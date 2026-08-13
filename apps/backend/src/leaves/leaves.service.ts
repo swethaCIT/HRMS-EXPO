@@ -129,7 +129,7 @@ export class LeavesService {
       if (!user?.id) return;
       await this.notifications.createForUser(user.id, title, body, NotificationType.LEAVE);
       if (user.email) await this.mail.send(user.email, title, body);
-      if (user.fcmToken) await this.notifications.sendToDevice(user.fcmToken, title, body, { type: 'leave', leaveId: leave.id });
+      if (user.expoPushToken) await this.notifications.sendToDevice(user.expoPushToken, title, body, { type: 'leave', leaveId: leave.id });
     } catch (err: any) {
       this.logger.error(`Failed to create leave notification: ${err?.message}`);
     }
@@ -147,13 +147,13 @@ export class LeavesService {
       const applicantSubject = 'Leave request submitted';
       const applicantBody = `Your ${leave.type} leave request (${range}, ${leave.totalDays} day(s)) has been submitted and is pending approval.`;
       if (applicantUser?.email) await this.mail.send(applicantUser.email, applicantSubject, applicantBody);
-      if (applicantUser?.fcmToken) await this.notifications.sendToDevice(applicantUser.fcmToken, applicantSubject, applicantBody, { type: 'leave', leaveId: leave.id });
+      if (applicantUser?.expoPushToken) await this.notifications.sendToDevice(applicantUser.expoPushToken, applicantSubject, applicantBody, { type: 'leave', leaveId: leave.id });
 
       const approvers = await this.users.findApprovers([UserRole.MANAGER, UserRole.HR, UserRole.ADMIN]);
       const approverSubject = 'New leave request pending approval';
       const approverBody = `${applicantName} applied for ${leave.type} leave (${range}, ${leave.totalDays} day(s)). Review it in the HR dashboard.`;
       await Promise.all(approvers.map((a) => this.mail.send(a.email, approverSubject, approverBody)));
-      const approverTokens = approvers.map((a) => a.fcmToken).filter((t): t is string => !!t);
+      const approverTokens = approvers.map((a) => a.expoPushToken).filter((t): t is string => !!t);
       await this.notifications.sendToMultiple(approverTokens, approverSubject, approverBody, { type: 'leave', leaveId: leave.id });
     } catch (err: any) {
       this.logger.error(`Failed to send leave-applied email: ${err?.message}`);

@@ -1,10 +1,9 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { LessThan, Repository } from 'typeorm';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getMessaging } from 'firebase-admin/messaging';
+import { Expo, ExpoPushMessage } from 'expo-server-sdk';
 import {
   Notification,
   NotificationStatus,
@@ -16,10 +15,10 @@ import { UsersService } from '../users/users.service';
 const MAX_DELIVERY_ATTEMPTS = 3;
 
 @Injectable()
-export class NotificationsService implements OnModuleInit {
+export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
-  private enabled = false;
   private retrying = false;
+  private readonly expo: Expo;
 
   constructor(
     private readonly config: ConfigService,
@@ -27,7 +26,14 @@ export class NotificationsService implements OnModuleInit {
     private readonly notificationRepo: Repository<Notification>,
     private readonly mail: MailService,
     private readonly users: UsersService,
-  ) {}
+  ) {
+    // No credentials required for the Expo push service — an access token is
+    // only needed to opt into enhanced security (rejecting tokens from other
+    // Expo accounts) and isn't required for delivery.
+    this.expo = new Expo({
+      accessToken: this.config.get<string>('EXPO_ACCESS_TOKEN') || undefined,
+    });
+  }
 
   /* ── In-app notifications (DB-backed) ── */
   createForUser(
@@ -133,12 +139,12 @@ export class NotificationsService implements OnModuleInit {
       );
       delivered = result.delivered;
     }
-    if (user?.fcmToken) {
+    if (user?.expoPushToken) {
       const data = notification.eventId
         ? { type: 'calendar', eventId: notification.eventId }
         : undefined;
       await this.sendToDevice(
-        user.fcmToken,
+        user.expoPushToken,
         notification.title,
         notification.body,
         data,
@@ -179,49 +185,19 @@ export class NotificationsService implements OnModuleInit {
     }
   }
 
-  onModuleInit() {
-    const projectId = this.config.get<string>('FIREBASE_PROJECT_ID');
-    const clientEmail = this.config.get<string>('FIREBASE_CLIENT_EMAIL');
-    const privateKey = this.config
-      .get<string>('FIREBASE_PRIVATE_KEY')
-      ?.replace(/\\n/g, '\n');
-
-    // Firebase is optional — skip initialization (and push notifications) when
-    // credentials are not configured, so the API still boots in dev.
-    if (!projectId || !clientEmail || !privateKey) {
-      this.logger.warn(
-        'Firebase credentials not set — push notifications disabled',
-      );
-      return;
-    }
-
-    if (!getApps().length) {
-      initializeApp({
-        credential: cert({ projectId, clientEmail, privateKey }),
-      });
-    }
-    this.enabled = true;
-    this.logger.log('Firebase Admin initialized');
-  }
-
   async sendToDevice(
     token: string,
     title: string,
     body: string,
     data?: Record<string, string>,
   ): Promise<void> {
-    if (!this.enabled) return;
-    try {
-      await getMessaging().send({
-        token,
-        notification: { title, body },
-        data,
-        android: { priority: 'high' },
-        apns: { payload: { aps: { sound: 'default' } } },
-      });
-    } catch (error: any) {
-      this.logger.error(`Failed to send notification: ${error.message}`);
+    if (!Expo.isExpoPushToken(token)) {
+      this.logger.warn(`Ignoring malformed Expo push token: ${token}`);
+      return;
     }
+    await this.sendChunked([
+      { to: token, title, body, data, sound: 'default', priority: 'high' },
+    ]);
   }
 
   async sendToMultiple(
@@ -230,17 +206,30 @@ export class NotificationsService implements OnModuleInit {
     body: string,
     data?: Record<string, string>,
   ): Promise<void> {
-    if (!this.enabled || !tokens.length) return;
-    try {
-      await getMessaging().sendEachForMulticast({
-        tokens,
-        notification: { title, body },
+    const validTokens = tokens.filter((t) => Expo.isExpoPushToken(t));
+    if (!validTokens.length) return;
+    await this.sendChunked(
+      validTokens.map((to) => ({
+        to,
+        title,
+        body,
         data,
-      });
-    } catch (error: any) {
-      this.logger.error(
-        `Failed to send multicast notification: ${error.message}`,
-      );
+        sound: 'default',
+        priority: 'high',
+      })),
+    );
+  }
+
+  private async sendChunked(messages: ExpoPushMessage[]): Promise<void> {
+    const chunks = this.expo.chunkPushNotifications(messages);
+    for (const chunk of chunks) {
+      try {
+        await this.expo.sendPushNotificationsAsync(chunk);
+      } catch (error: any) {
+        this.logger.error(
+          `Failed to send push notification chunk: ${error.message}`,
+        );
+      }
     }
   }
 }

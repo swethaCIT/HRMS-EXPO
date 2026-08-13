@@ -113,7 +113,7 @@ export class TicketsService {
       await this.notifications.createForUser(ticket.createdById, title, body, NotificationType.TICKET);
       const creator = await this.users.findOne(ticket.createdById).catch(() => null);
       if (creator?.email) await this.mail.send(creator.email, title, body);
-      if (creator?.fcmToken) await this.notifications.sendToDevice(creator.fcmToken, title, body, { type: 'ticket', ticketId: ticket.id });
+      if (creator?.expoPushToken) await this.notifications.sendToDevice(creator.expoPushToken, title, body, { type: 'ticket', ticketId: ticket.id });
     } catch (err: any) {
       this.logger.error(`Failed to create ticket notification: ${err?.message}`);
     }
@@ -126,13 +126,13 @@ export class TicketsService {
       const applicantSubject = 'Ticket submitted';
       const applicantBody = `Your ticket ${ticket.ticketId} — "${ticket.subject}" has been submitted and is pending approval.`;
       if (creator?.email) await this.mail.send(creator.email, applicantSubject, applicantBody);
-      if (creator?.fcmToken) await this.notifications.sendToDevice(creator.fcmToken, applicantSubject, applicantBody, { type: 'ticket', ticketId: ticket.id });
+      if (creator?.expoPushToken) await this.notifications.sendToDevice(creator.expoPushToken, applicantSubject, applicantBody, { type: 'ticket', ticketId: ticket.id });
 
       const approvers = await this.users.findApprovers([UserRole.MANAGER, UserRole.HR, UserRole.ADMIN]);
       const approverSubject = 'New ticket pending approval';
       const approverBody = `${creator?.email ?? 'An employee'} raised ticket ${ticket.ticketId} — "${ticket.subject}" (${ticket.priority} priority). Review it in the HR dashboard.`;
       await Promise.all(approvers.map((a) => this.mail.send(a.email, approverSubject, approverBody)));
-      const approverTokens = approvers.map((a) => a.fcmToken).filter((t): t is string => !!t);
+      const approverTokens = approvers.map((a) => a.expoPushToken).filter((t): t is string => !!t);
       await this.notifications.sendToMultiple(approverTokens, approverSubject, approverBody, { type: 'ticket', ticketId: ticket.id });
     } catch (err: any) {
       this.logger.error(`Failed to send ticket-raised email: ${err?.message}`);

@@ -26,13 +26,13 @@ export class NotificationsController {
     private readonly usersService: UsersService,
   ) {}
 
-  /** Register/refresh the signed-in user's own FCM device token — self-service, no role check needed. */
-  @Patch('fcm-token')
-  async updateFcmToken(
+  /** Register/refresh the signed-in user's own Expo push token — self-service, no role check needed. */
+  @Patch('push-token')
+  async updateExpoPushToken(
     @CurrentUser('id') userId: string,
     @Body('token') token: string,
   ) {
-    await this.usersService.updateFcmToken(userId, token);
+    await this.usersService.updateExpoPushToken(userId, token);
     return { success: true };
   }
 
@@ -59,10 +59,10 @@ export class NotificationsController {
     return this.notificationsService.markRead(id, userId);
   }
 
-  /* ── Push (FCM) ── */
+  /* ── Push (Expo) ── */
   /**
    * Admin-only. This forwards a caller-supplied device token and message
-   * straight to FCM: left open, any employee could push a convincing spoofed
+   * straight to the Expo push service: left open, any employee could push a convincing spoofed
    * alert ("Payroll action required") that renders with the company's own app
    * identity to any device token they could harvest.
    */

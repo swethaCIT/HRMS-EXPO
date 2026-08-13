@@ -505,8 +505,8 @@ export class WorkItemsService {
 
       await this.notifications.createForUser(user.id, title, shortBody, NotificationType.WORK_ITEM);
       if (user.email) await this.mail.send(user.email, title, emailBody);
-      if (user.fcmToken) {
-        await this.notifications.sendToDevice(user.fcmToken, title, shortBody, { type: 'workItem', workItemId: item.id });
+      if (user.expoPushToken) {
+        await this.notifications.sendToDevice(user.expoPushToken, title, shortBody, { type: 'workItem', workItemId: item.id });
       }
     } catch (err: any) {
       this.logger.error(`Failed to notify work-item assignee: ${err?.message}`);

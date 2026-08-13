@@ -73,14 +73,14 @@ export class RequestsService {
       const applicantSubject = 'Request submitted';
       const applicantBody = `Your ${request.kind} request — "${request.title}" has been submitted and is pending approval.`;
       if (creator?.email) await this.mail.send(creator.email, applicantSubject, applicantBody);
-      if (creator?.fcmToken) await this.notifications.sendToDevice(creator.fcmToken, applicantSubject, applicantBody, { type: 'request', requestId: request.id });
+      if (creator?.expoPushToken) await this.notifications.sendToDevice(creator.expoPushToken, applicantSubject, applicantBody, { type: 'request', requestId: request.id });
 
       const approvers = await this.users.findApprovers();
       const who = request.employeeName || creator?.email || 'An employee';
       const approverSubject = 'New request pending approval';
       const approverBody = `${who} raised a new ${request.kind} request — "${request.title}". Review it in the HR dashboard.`;
       await Promise.all(approvers.map((a) => this.mail.send(a.email, approverSubject, approverBody)));
-      const approverTokens = approvers.map((a) => a.fcmToken).filter((t): t is string => !!t);
+      const approverTokens = approvers.map((a) => a.expoPushToken).filter((t): t is string => !!t);
       await this.notifications.sendToMultiple(approverTokens, approverSubject, approverBody, { type: 'request', requestId: request.id });
     } catch (err: any) {
       this.logger.error(`Failed to send request-submitted email: ${err?.message}`);
@@ -97,7 +97,7 @@ export class RequestsService {
       const subject = `Request ${verb}`;
       const body = `Your ${request.kind} request — "${request.title}" has been ${verb}.`;
       if (creator.email) await this.mail.send(creator.email, subject, body);
-      if (creator.fcmToken) await this.notifications.sendToDevice(creator.fcmToken, subject, body, { type: 'request', requestId: request.id });
+      if (creator.expoPushToken) await this.notifications.sendToDevice(creator.expoPushToken, subject, body, { type: 'request', requestId: request.id });
     } catch (err: any) {
       this.logger.error(`Failed to send request-decided email: ${err?.message}`);
     }
