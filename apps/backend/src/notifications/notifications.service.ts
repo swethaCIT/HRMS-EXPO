@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { LessThan, Repository } from 'typeorm';
-import { Expo, ExpoPushMessage } from 'expo-server-sdk';
 import {
   Notification,
   NotificationStatus,
@@ -13,12 +12,32 @@ import { MailService } from '../mail/mail.service';
 import { UsersService } from '../users/users.service';
 
 const MAX_DELIVERY_ATTEMPTS = 3;
+const EXPO_PUSH_API = 'https://exp.host/--/api/v2/push/send';
+// The Expo push API rejects a request with more than 100 messages.
+const EXPO_PUSH_CHUNK_SIZE = 100;
+
+interface ExpoPushMessage {
+  to: string;
+  title: string;
+  body: string;
+  data?: Record<string, string>;
+  sound: 'default';
+  priority: 'high';
+}
+
+/** Same shape expo-server-sdk uses — tokens look like ExponentPushToken[xxxxxxxx] or ExpoPushToken[xxxxxxxx]. */
+function isExpoPushToken(token: string): boolean {
+  return (
+    typeof token === 'string' &&
+    (token.startsWith('ExponentPushToken[') || token.startsWith('ExpoPushToken[')) &&
+    token.endsWith(']')
+  );
+}
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
   private retrying = false;
-  private readonly expo: Expo;
 
   constructor(
     private readonly config: ConfigService,
@@ -26,14 +45,7 @@ export class NotificationsService {
     private readonly notificationRepo: Repository<Notification>,
     private readonly mail: MailService,
     private readonly users: UsersService,
-  ) {
-    // No credentials required for the Expo push service — an access token is
-    // only needed to opt into enhanced security (rejecting tokens from other
-    // Expo accounts) and isn't required for delivery.
-    this.expo = new Expo({
-      accessToken: this.config.get<string>('EXPO_ACCESS_TOKEN') || undefined,
-    });
-  }
+  ) {}
 
   /* ── In-app notifications (DB-backed) ── */
   createForUser(
@@ -191,7 +203,7 @@ export class NotificationsService {
     body: string,
     data?: Record<string, string>,
   ): Promise<void> {
-    if (!Expo.isExpoPushToken(token)) {
+    if (!isExpoPushToken(token)) {
       this.logger.warn(`Ignoring malformed Expo push token: ${token}`);
       return;
     }
@@ -206,7 +218,7 @@ export class NotificationsService {
     body: string,
     data?: Record<string, string>,
   ): Promise<void> {
-    const validTokens = tokens.filter((t) => Expo.isExpoPushToken(t));
+    const validTokens = tokens.filter(isExpoPushToken);
     if (!validTokens.length) return;
     await this.sendChunked(
       validTokens.map((to) => ({
@@ -220,11 +232,32 @@ export class NotificationsService {
     );
   }
 
+  /**
+   * POSTs directly to the Expo push API (https://exp.host/--/api/v2/push/send)
+   * rather than depending on expo-server-sdk, which ships ESM-only with no
+   * CommonJS build — `require()`-ing it crashes this CJS NestJS app at
+   * runtime. A plain fetch avoids that module-system mismatch entirely.
+   */
   private async sendChunked(messages: ExpoPushMessage[]): Promise<void> {
-    const chunks = this.expo.chunkPushNotifications(messages);
-    for (const chunk of chunks) {
+    const accessToken = this.config.get<string>('EXPO_ACCESS_TOKEN');
+    for (let i = 0; i < messages.length; i += EXPO_PUSH_CHUNK_SIZE) {
+      const chunk = messages.slice(i, i + EXPO_PUSH_CHUNK_SIZE);
       try {
-        await this.expo.sendPushNotificationsAsync(chunk);
+        const res = await fetch(EXPO_PUSH_API, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'Accept-Encoding': 'gzip, deflate',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify(chunk),
+        });
+        if (!res.ok) {
+          this.logger.error(
+            `Expo push API responded ${res.status}: ${await res.text()}`,
+          );
+        }
       } catch (error: any) {
         this.logger.error(
           `Failed to send push notification chunk: ${error.message}`,
