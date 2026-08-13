@@ -7,7 +7,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "backgroundColor": "#4F46E5",
     "ios": {
       "supportsTablet": false,
@@ -22,8 +21,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#4F46E5"
       },
-      "permissions": ["INTERNET", "POST_NOTIFICATIONS"],
-      "edgeToEdgeEnabled": true
+      "permissions": ["INTERNET", "POST_NOTIFICATIONS"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
