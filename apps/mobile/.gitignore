@@ -1,3 +1,12 @@
+# Expo — managed workflow: native projects are generated on demand by
+# `expo prebuild` / `eas build`, not committed. Run `expo prebuild` locally
+# if you need to inspect or hand-edit the native Android/iOS projects.
+.expo/
+/android
+/ios
+dist/
+web-build/
+
 # OSX
 #
 .DS_Store
@@ -24,7 +33,6 @@ DerivedData
 
 # Android/IntelliJ
 #
-build/
 .idea
 .gradle
 local.properties

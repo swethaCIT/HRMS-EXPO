@@ -2,14 +2,11 @@
  * @format
  */
 
-import { AppRegistry } from 'react-native';
+import { registerRootComponent } from 'expo';
 import App from './App';
-import { name as appName } from './app.json';
-import { registerBackgroundHandler } from './src/utils/pushNotifications';
 
-// Must run before registerComponent — the only place React Native Firebase
-// allows the background/quit-state message handler to be set up. No-ops safely
-// if no Firebase project is configured yet (see pushNotifications.ts).
-registerBackgroundHandler();
-
-AppRegistry.registerComponent(appName, () => App);
+// registerRootComponent calls AppRegistry.registerComponent('main', () => App)
+// and, in Expo Go, wires up the correct root view automatically. Background/
+// quit-state push delivery is handled by the OS + Expo push service — no
+// manual background-message-handler registration needed (unlike Firebase).
+registerRootComponent(App);

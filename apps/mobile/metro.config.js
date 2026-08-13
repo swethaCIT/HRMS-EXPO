@@ -1,5 +1,5 @@
 const path = require('path');
-const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
+const { getDefaultConfig, mergeConfig } = require('expo/metro-config');
 
 /**
  * Metro configuration — monorepo aware.
