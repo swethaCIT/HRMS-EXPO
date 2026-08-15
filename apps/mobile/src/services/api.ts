@@ -59,6 +59,21 @@ export const onboardingApi = {
   list: () => api.get('/onboarding'),
 };
 
+// HR Onboard Notify — pre-onboarding data collection (public form is served
+// directly by the backend via emailed link; nothing here calls that side).
+export const onboardNotifyApi = {
+  create: (data: any) => api.post('/onboard-notify', data),
+  list: (status?: string) => api.get('/onboard-notify', { params: status ? { status } : undefined }),
+  getOne: (id: string) => api.get(`/onboard-notify/${id}`),
+  fieldCatalog: () => api.get('/onboard-notify/field-catalog'),
+  resend: (id: string) => api.post(`/onboard-notify/${id}/resend`),
+  review: (id: string, decision: 'approved' | 'changes_requested', comments?: string) =>
+    api.post(`/onboard-notify/${id}/review`, { decision, comments }),
+  forward: (id: string, forwards: { department: string; recipientUserId: string; fieldsShared: string[] }[]) =>
+    api.post(`/onboard-notify/${id}/forward`, { forwards }),
+  complete: (id: string) => api.patch(`/onboard-notify/${id}/complete`),
+};
+
 export const ticketApi = {
   getMine: () => api.get('/tickets/mine'),
   getAll: () => api.get('/tickets'),

@@ -25,6 +25,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { RegularizationsModule } from './regularizations/regularizations.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TeamCalendarModule } from './team-calendar/team-calendar.module';
+import { OnboardNotifyModule } from './onboard-notify/onboard-notify.module';
 import { AccessControlModule } from './common/access/access-control.module';
 import { AuditModule } from './audit/audit.module';
 import { AuditInterceptor } from './audit/audit.interceptor';
@@ -78,6 +79,7 @@ import { buildCacheOptions } from './config/redis.config';
     RegularizationsModule,
     ProjectsModule,
     TeamCalendarModule,
+    OnboardNotifyModule,
   ],
   controllers: [HealthController],
   providers: [

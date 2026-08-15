@@ -18,6 +18,12 @@ export enum NotificationType {
   CALENDAR_CANCEL = 'calendar_cancel',
   CALENDAR_REMINDER = 'calendar_reminder',
   WORK_ITEM = 'work_item',
+  // HR Onboard Notify. There is no ONBOARD_CHANGES_REQUESTED type here — that
+  // step notifies the onboarding candidate, who has no `userId`/User row to
+  // attach a Notification to. It's delivered as a direct email instead (see
+  // OnboardNotifyService), via the same NotificationTemplate the invite uses.
+  ONBOARD_SUBMITTED = 'onboard_submitted',
+  ONBOARD_ROUTED = 'onboard_routed',
 }
 
 // Delivery status of the notification itself (email/push), independent of

@@ -104,6 +104,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
     { l: 'People', sub: 'Directory', icon: 'users', go: 'People', fg: T.green.solid, bg: T.green.bg },
     { l: 'Insights', sub: 'Analytics', icon: 'bar-chart', go: 'Insights', fg: T.amber.solid, bg: T.amber.bg },
     { l: 'Calendar', sub: 'Meetings', icon: 'calendar', go: 'Calendar', fg: T.purple.solid, bg: T.purple.bg },
+    { l: 'Onboard Notify', sub: 'Pre-onboarding', icon: 'file-text', go: 'OnboardNotifyList', fg: T.primary, bg: '#EEF2FF' },
   ];
 
   return (

@@ -12,7 +12,9 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.hrms.mobile",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -21,7 +23,10 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#4F46E5"
       },
-      "permissions": ["INTERNET", "POST_NOTIFICATIONS"]
+      "permissions": [
+        "INTERNET",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -47,8 +52,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+        "projectId": "24146262-d1b9-4137-911e-e9447ebaae70"
       }
-    }
+    },
+    "owner": "swetha_17"
   }
 }

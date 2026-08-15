@@ -32,6 +32,9 @@ import HRDashboardScreen from '../screens/hr/HRDashboardScreen';
 import PeopleScreen      from '../screens/hr/PeopleScreen';
 import RequestsScreen    from '../screens/hr/RequestsScreen';
 import HRInsightsScreen  from '../screens/hr/HRInsightsScreen';
+import OnboardNotifyListScreen   from '../screens/hr/OnboardNotifyListScreen';
+import OnboardNotifyCreateScreen from '../screens/hr/OnboardNotifyCreateScreen';
+import OnboardNotifyDetailScreen from '../screens/hr/OnboardNotifyDetailScreen';
 
 import AdminDashboardScreen  from '../screens/admin/AdminDashboardScreen';
 import UserManagementScreen  from '../screens/admin/UserManagementScreen';
@@ -117,6 +120,11 @@ const LEAF_SCREENS: [string, React.ComponentType<any>][] = [
   ['Notifications', NotificationsScreen],
   ['Announcements', AnnouncementsScreen],
   ['Documents', DocumentsScreen],
+  /* HR Onboard Notify — HR/Admin only; entry point is a quick-action card on
+     their dashboard, same gating convention as every other leaf screen here. */
+  ['OnboardNotifyList', OnboardNotifyListScreen],
+  ['OnboardNotifyCreate', OnboardNotifyCreateScreen],
+  ['OnboardNotifyDetail', OnboardNotifyDetailScreen],
   /* Goals / project management board */
   ['Projects', ProjectsScreen],
   ['ProjectDetail', ProjectDetailScreen],

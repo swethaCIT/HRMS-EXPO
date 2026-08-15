@@ -19,7 +19,7 @@
 import 'reflect-metadata';
 import * as dotenv from 'dotenv';
 import { DataSource } from 'typeorm';
-import { schemaFromUrl } from './config/database.config';
+import { schemaFromUrl } from './config/database.config.js';
 
 dotenv.config();
 

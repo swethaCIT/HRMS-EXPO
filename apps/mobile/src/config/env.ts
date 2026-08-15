@@ -28,11 +28,16 @@ export const PRODUCTION_API_BASE_URL = '';
  * Debug builds talk to a backend on the developer's machine.
  * `10.0.2.2` is the Android emulator's alias for the host's localhost;
  * iOS simulators share the host's network stack, so `localhost` is correct there.
- * Override this when testing on a physical device on your LAN, e.g.
- * 'http://192.168.1.20:3000/api/v1'.
+ * On a physical device (emulator/simulator aliases aren't reachable), this must
+ * be the dev machine's actual LAN IP instead — set below.
  */
-export const DEV_API_BASE_URL =
-  Platform.OS === 'android' ? 'http://10.0.2.2:3000/api/v1' : 'http://localhost:3000/api/v1';
+const PHYSICAL_DEVICE_DEV_HOST = '192.168.0.10';
+
+export const DEV_API_BASE_URL = PHYSICAL_DEVICE_DEV_HOST
+  ? `http://${PHYSICAL_DEVICE_DEV_HOST}:3000/api/v1`
+  : Platform.OS === 'android'
+    ? 'http://10.0.2.2:3000/api/v1'
+    : 'http://localhost:3000/api/v1';
 
 export const API_BASE_URL = __DEV__ ? DEV_API_BASE_URL : PRODUCTION_API_BASE_URL;
 
