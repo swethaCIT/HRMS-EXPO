@@ -71,7 +71,7 @@ export default function OnboardNotifyCreateScreen({ navigation }: any) {
       });
       Alert.alert(
         'Invitation sent',
-        `${tempName.trim()} will receive a secure onboarding link at ${email.trim()}.`,
+        `${tempName.trim()} will receive a Login ID and temporary password at ${email.trim()} to sign in to the onboarding portal.`,
         [{ text: 'Done', onPress: () => navigation?.goBack() }],
       );
     } catch (e: any) {
@@ -112,7 +112,7 @@ export default function OnboardNotifyCreateScreen({ navigation }: any) {
           <TextInput style={st.input} placeholder="10-digit mobile number" placeholderTextColor="#9CA3AF" keyboardType="phone-pad" value={mobile} onChangeText={setMobile} />
 
           <Text style={st.label}>Personal Email *</Text>
-          <Text style={st.hint}>The secure onboarding link is sent here — the candidate doesn't need an HRMS login.</Text>
+          <Text style={st.hint}>A Login ID and temporary password for the onboarding portal are sent here — no HRMS account needed.</Text>
           <TextInput style={st.input} placeholder="name@example.com" placeholderTextColor="#9CA3AF" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
 
           <Text style={st.label}>Expected Joining Date</Text>

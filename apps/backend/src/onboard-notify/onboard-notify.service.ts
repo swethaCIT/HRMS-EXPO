@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { Between, DataSource, In, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import { OnboardingRecord, OnboardEmployeeType, OnboardStatus } from './entities/onboarding-record.entity';
@@ -10,7 +10,8 @@ import { OnboardingForward, OnboardForwardStatus } from './entities/onboarding-f
 import { CreateOnboardingRecordDto } from './dto/create-onboarding-record.dto';
 import { ReviewDecisionDto } from './dto/review-decision.dto';
 import { ForwardDecisionDto } from './dto/forward-decision.dto';
-import { OnboardingTokenService } from './onboarding-token.service';
+import { OnboardingAuthService } from './onboarding-auth.service';
+import { computeCompletion, isValidSectionKey } from './onboarding-sections';
 import { ONBOARD_FIELD_CATALOG, DEFAULT_DEPARTMENT_FIELDS, renderFieldsForNotification } from './onboarding-field-catalog';
 import { clampPaging } from '../common/utils/pagination';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -25,6 +26,16 @@ import { AuditAction } from '../audit/entities/audit-log.entity';
 const REVIEWABLE_STATUSES = [OnboardStatus.SUBMITTED, OnboardStatus.HR_REVIEW];
 const RESENDABLE_STATUSES = [OnboardStatus.INVITATION_SENT, OnboardStatus.LINK_OPENED];
 
+export interface OnboardListFilters {
+  employeeType?: OnboardEmployeeType;
+  status?: OnboardStatus;
+  department?: string;
+  joiningDateFrom?: string;
+  joiningDateTo?: string;
+  limit?: number;
+  offset?: number;
+}
+
 @Injectable()
 export class OnboardNotifyService {
   constructor(
@@ -33,7 +44,7 @@ export class OnboardNotifyService {
     @InjectRepository(OnboardingReview) private readonly reviewRepo: Repository<OnboardingReview>,
     @InjectRepository(OnboardingForward) private readonly forwardRepo: Repository<OnboardingForward>,
     @InjectDataSource() private readonly dataSource: DataSource,
-    private readonly tokens: OnboardingTokenService,
+    private readonly auth: OnboardingAuthService,
     private readonly templates: NotificationTemplatesService,
     private readonly notifications: NotificationsService,
     private readonly mail: MailService,
@@ -47,32 +58,39 @@ export class OnboardNotifyService {
     return this.config.get<string>('COMPANY_NAME') || 'HRMS';
   }
 
-  private publicLink(token: string): string {
+  /** Static — carries no secret. Identity comes entirely from the login-ID/password the candidate types in, not from anything in this URL. */
+  private portalLink(): string {
     const base = (this.config.get<string>('PUBLIC_BASE_URL') || `http://localhost:${this.config.get('PORT') || 3000}`).replace(/\/+$/, '');
-    return `${base}/api/v1/onboard-notify/public/${token}`;
+    return `${base}/api/v1/onboard-notify/portal`;
   }
 
-  private async inviteTemplateKey(type: OnboardEmployeeType): Promise<string> {
+  private inviteTemplateKey(type: OnboardEmployeeType): string {
     return type === OnboardEmployeeType.FRESHER ? 'onboarding.invite.fresher' : 'onboarding.invite.experienced';
   }
 
-  private async sendInviteEmail(record: OnboardingRecord): Promise<void> {
-    const token = await this.tokens.issueOrReuse(record.id);
-    const key = await this.inviteTemplateKey(record.employeeType);
+  private async sendInviteEmail(record: OnboardingRecord, tempPassword: string): Promise<void> {
+    const key = this.inviteTemplateKey(record.employeeType);
     const { subject, body } = await this.templates.render(key, {
       company: this.companyName(),
       name: record.tempName,
-      link: this.publicLink(token),
+      loginId: record.loginId,
+      tempPassword,
+      link: this.portalLink(),
     });
     await this.mail.send(record.email, subject, body);
   }
 
   async create(dto: CreateOnboardingRecordDto, actor: AuditActor): Promise<OnboardingRecord> {
     const onboardingRef = `OBN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${randomBytes(3).toString('hex').toUpperCase()}`;
+    const tempPassword = this.auth.generateTempPassword();
+    const passwordHash = await this.auth.hashPassword(tempPassword);
 
     const record = await this.recordRepo.save(
       this.recordRepo.create({
         onboardingRef,
+        loginId: onboardingRef,
+        passwordHash,
+        mustChangePassword: true,
         tempName: dto.tempName,
         mobile: dto.mobile,
         email: dto.email,
@@ -86,7 +104,7 @@ export class OnboardNotifyService {
       }),
     );
 
-    await this.sendInviteEmail(record);
+    await this.sendInviteEmail(record, tempPassword);
 
     void this.audit.record({
       action: AuditAction.CREATED,
@@ -101,16 +119,31 @@ export class OnboardNotifyService {
     return record;
   }
 
-  async findAll(status?: OnboardStatus, limit?: number, offset?: number) {
-    const { take, skip } = clampPaging(limit, offset);
-    const where = status ? { status } : {};
-    const [items, total] = await this.recordRepo.findAndCount({
-      where,
-      order: { createdAt: 'DESC' },
-      take,
-      skip,
-    });
-    return { items, total, limit: take, offset: skip };
+  async findAll(filters: OnboardListFilters) {
+    const { take, skip } = clampPaging(filters.limit, filters.offset);
+    const where: Record<string, any> = {};
+    if (filters.employeeType) where.employeeType = filters.employeeType;
+    if (filters.status) where.status = filters.status;
+    if (filters.department) where.department = filters.department;
+    if (filters.joiningDateFrom && filters.joiningDateTo) {
+      where.expectedJoiningDate = Between(new Date(filters.joiningDateFrom), new Date(filters.joiningDateTo));
+    }
+
+    const [items, total] = await this.recordRepo.findAndCount({ where, order: { createdAt: 'DESC' }, take, skip });
+
+    // Batch-fetch responses for exactly this page rather than one query per
+    // row, so the list screen's completion % doesn't cost N+1 round trips.
+    const responses = items.length
+      ? await this.responseRepo.find({ where: { onboardingId: In(items.map((i) => i.id)) } })
+      : [];
+    const responseByOnboardingId = new Map(responses.map((r) => [r.onboardingId, r]));
+
+    const withProgress = items.map((record) => ({
+      ...record,
+      completionPercent: computeCompletion(record.employeeType, responseByOnboardingId.get(record.id) ?? null).percent,
+    }));
+
+    return { items: withProgress, total, limit: take, offset: skip };
   }
 
   private async loadRecord(id: string): Promise<OnboardingRecord> {
@@ -131,15 +164,18 @@ export class OnboardNotifyService {
       this.reviewRepo.find({ where: { onboardingId: id }, order: { reviewedAt: 'DESC' } }),
       this.forwardRepo.find({ where: { onboardingId: id }, order: { createdAt: 'DESC' } }),
     ]);
-    return { record, response, reviews, forwards };
+    const { percent, sections } = computeCompletion(record.employeeType, response);
+    return { record, response, reviews, forwards, completionPercent: percent, sectionsDone: sections };
   }
 
+  /** A fresh temporary password for the SAME login ID/record — never a second account. */
   async resend(id: string, actor: AuditActor): Promise<OnboardingRecord> {
     const record = await this.loadRecord(id);
     if (!RESENDABLE_STATUSES.includes(record.status)) {
       throw new BadRequestException(`Cannot resend the invite once onboarding has status "${record.status}"`);
     }
-    await this.sendInviteEmail(record);
+    const tempPassword = await this.auth.resetTempPassword(record);
+    await this.sendInviteEmail(record, tempPassword);
     void this.audit.record({
       action: AuditAction.UPDATED,
       entityType: 'onboarding_record',
@@ -147,7 +183,7 @@ export class OnboardNotifyService {
       entityLabel: record.onboardingRef,
       actor,
       subjectName: record.tempName,
-      summary: `${actor.name ?? 'HR'} resent the onboarding invite to ${record.tempName}`,
+      summary: `${actor.name ?? 'HR'} resent the onboarding invite to ${record.tempName} with a new temporary password`,
     });
     return record;
   }
@@ -158,12 +194,21 @@ export class OnboardNotifyService {
       throw new BadRequestException(`Cannot review onboarding with status "${record.status}"`);
     }
 
+    if (dto.correctionSections?.length) {
+      for (const c of dto.correctionSections) {
+        if (!isValidSectionKey(record.employeeType, c.section)) {
+          throw new BadRequestException(`"${c.section}" is not a valid section for a ${record.employeeType} onboarding.`);
+        }
+      }
+    }
+
     await this.reviewRepo.save(
       this.reviewRepo.create({
         onboardingId: id,
         reviewedById: actor.id!,
         decision: dto.decision,
         comments: dto.comments ?? null,
+        correctionSections: dto.correctionSections?.length ? dto.correctionSections : null,
       }),
     );
 
@@ -183,12 +228,16 @@ export class OnboardNotifyService {
       record.status = OnboardStatus.CHANGES_REQUESTED;
       await this.recordRepo.update(id, { status: record.status });
 
-      // Same token, same link — never reissued for a correction cycle.
-      const token = await this.tokens.issueOrReuse(record.id);
+      // No new credentials, no new link — the candidate signs back in with
+      // the password they already set.
+      const sectionList = dto.correctionSections?.length
+        ? dto.correctionSections.map((c) => `- ${c.section}: ${c.reason}`).join('\n')
+        : '';
       const { subject, body } = await this.templates.render('onboarding.changes_requested', {
         name: record.tempName,
-        link: this.publicLink(token),
-        comments: dto.comments ?? '',
+        link: this.portalLink(),
+        loginId: record.loginId,
+        comments: [dto.comments ?? '', sectionList].filter(Boolean).join('\n\n'),
       });
       await this.mail.send(record.email, subject, body);
 

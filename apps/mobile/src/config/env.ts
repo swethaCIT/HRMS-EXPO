@@ -31,7 +31,7 @@ export const PRODUCTION_API_BASE_URL = '';
  * On a physical device (emulator/simulator aliases aren't reachable), this must
  * be the dev machine's actual LAN IP instead — set below.
  */
-const PHYSICAL_DEVICE_DEV_HOST = '192.168.0.10';
+const PHYSICAL_DEVICE_DEV_HOST = '192.168.0.9';
 
 export const DEV_API_BASE_URL = PHYSICAL_DEVICE_DEV_HOST
   ? `http://${PHYSICAL_DEVICE_DEV_HOST}:3000/api/v1`

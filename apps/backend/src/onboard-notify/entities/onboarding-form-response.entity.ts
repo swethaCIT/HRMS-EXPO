@@ -2,6 +2,8 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateCol
 
 /** Metadata/reference only — actual bytes live in Supabase Storage via StorageService, never here. Mirrors documents/entities/document.entity.ts. */
 export interface OnboardDocumentMeta {
+  /** Client-safe identifier for remove/replace — `storagePath` itself is never sent to the portal (see sanitizeDocuments). */
+  id: string;
   storagePath: string;
   name: string;
   category: string;
