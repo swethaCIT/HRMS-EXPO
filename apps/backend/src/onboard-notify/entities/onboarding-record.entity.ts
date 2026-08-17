@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+import { Exclude } from 'class-transformer';
 
 export enum OnboardEmployeeType {
   FRESHER = 'fresher',
@@ -22,8 +23,14 @@ export enum OnboardStatus {
  * HRMS account. Deliberately separate from `OnboardingInvite` (see
  * ../../onboarding/entities/onboarding-invite.entity.ts), which is a different,
  * simpler self-registration flow (typed OTP, provisions a User immediately).
- * This one collects a full onboarding form over a long-lived link and never
- * creates a User/Employee itself — see EmployeesService.create().
+ * This one collects a full onboarding form over a scoped login session and
+ * never creates a User/Employee itself — see EmployeesService.create().
+ *
+ * The candidate signs in with `loginId`/`passwordHash` (see
+ * OnboardingAuthService), NOT a real HRMS `User` row — a real User with
+ * UserRole.EMPLOYEE would grant genuine access to leave/payroll/tickets/etc.,
+ * which a pre-hire candidate must never have. OnboardingSessionGuard scopes a
+ * session strictly to this one record.
  */
 @Entity('onboarding_records')
 export class OnboardingRecord {
@@ -71,6 +78,24 @@ export class OnboardingRecord {
   @Index()
   @Column()
   createdById: string;
+
+  /* ── Portal credentials — scoped to this record only, never a real User ── */
+
+  /** Currently always equal to `onboardingRef`, kept as its own column since the two concepts (display reference vs. login identity) may diverge later. */
+  @Index({ unique: true })
+  @Column()
+  loginId: string;
+
+  @Column()
+  @Exclude()
+  passwordHash: string;
+
+  /** Cleared the moment the candidate sets their own password — see OnboardingSessionGuard, which re-checks this live rather than trusting a stale JWT claim. */
+  @Column({ default: true })
+  mustChangePassword: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastLoginAt: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

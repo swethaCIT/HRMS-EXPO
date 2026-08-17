@@ -12,6 +12,16 @@ const DEPARTMENTS: { key: string; label: string }[] = [
   { key: 'manager', label: 'Manager' },
 ];
 
+const SECTION_LABELS: Record<string, string> = {
+  personalDetails: 'Personal Information',
+  contactInfo: 'Contact Information',
+  emergencyContact: 'Emergency Contact',
+  education: 'Education',
+  bankDetails: 'Bank Details',
+  employmentHistory: 'Previous Employment',
+  documents: 'Documents',
+};
+
 const STATUS_META: Record<string, { label: string; tint: keyof typeof TINT }> = {
   invitation_sent: { label: 'Invitation Sent', tint: 'blue' },
   link_opened: { label: 'Link Opened', tint: 'blue' },
@@ -44,6 +54,29 @@ function humanize(key: string): string {
   return key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
 }
 
+/** Renders {records: [...]}-shaped sections (education, employment history) — repeatable entries, unlike the flat sections SectionBlock handles. */
+function RepeatBlock({ title, data }: { title: string; data: { records?: Record<string, any>[] } | null | undefined }) {
+  const records = data?.records ?? [];
+  if (!records.length) return null;
+  return (
+    <View style={st.sectionBlock}>
+      <Text style={st.sectionTitle}>{title}</Text>
+      {records.map((rec, i) => (
+        <View key={i} style={i > 0 ? st.repeatDivider : undefined}>
+          {Object.entries(rec)
+            .filter(([, v]) => v !== undefined && v !== null && v !== '')
+            .map(([k, v]) => (
+              <View key={k} style={st.kvRow}>
+                <Text style={st.kvKey}>{humanize(k)}</Text>
+                <Text style={st.kvVal}>{String(v)}</Text>
+              </View>
+            ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 interface RecipientOption { id: string; userId: string; name: string; designation?: string }
 
 export default function OnboardNotifyDetailScreen({ route, navigation }: any) {
@@ -58,6 +91,7 @@ export default function OnboardNotifyDetailScreen({ route, navigation }: any) {
 
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [comments, setComments] = useState('');
+  const [flaggedSections, setFlaggedSections] = useState<Record<string, string>>({});
 
   const [forwardState, setForwardState] = useState<Record<string, { enabled: boolean; recipient: RecipientOption | null; query: string; pickerOpen: boolean; fields: Set<string> }>>(
     () => Object.fromEntries(DEPARTMENTS.map((d) => [d.key, { enabled: false, recipient: null, query: '', pickerOpen: false, fields: new Set<string>() }])),
@@ -105,18 +139,45 @@ export default function OnboardNotifyDetailScreen({ route, navigation }: any) {
   const response = detail?.response;
   const status: string = record?.status;
 
+  const toggleFlaggedSection = (key: string) => {
+    setFlaggedSections((p) => {
+      const next = { ...p };
+      if (key in next) delete next[key];
+      else next[key] = '';
+      return next;
+    });
+  };
+
   const doReview = async (decision: 'approved' | 'changes_requested') => {
-    if (decision === 'changes_requested' && !comments.trim()) {
-      setCommentsOpen(true);
-      return Alert.alert('Comments required', 'Tell the candidate what needs to change.');
+    if (decision === 'changes_requested') {
+      if (!comments.trim()) {
+        setCommentsOpen(true);
+        return Alert.alert('Comments required', 'Add an overall note for the candidate.');
+      }
+      const picked = Object.entries(flaggedSections);
+      if (picked.some(([, reason]) => !reason.trim())) {
+        return Alert.alert('Reason required', 'Add a reason for every section you flagged, or unflag it.');
+      }
     }
     setBusy(true);
     try {
-      await onboardNotifyApi.review(id, decision, decision === 'changes_requested' ? comments.trim() : undefined);
+      const correctionSections =
+        decision === 'changes_requested' && Object.keys(flaggedSections).length
+          ? Object.entries(flaggedSections).map(([section, reason]) => ({ section, reason: reason.trim() }))
+          : undefined;
+      await onboardNotifyApi.review(id, decision, decision === 'changes_requested' ? comments.trim() : undefined, correctionSections);
       setComments('');
       setCommentsOpen(false);
+      setFlaggedSections({});
       await load();
-      Alert.alert(decision === 'approved' ? 'Approved' : 'Changes requested', decision === 'approved' ? 'You can now forward this to departments.' : 'The candidate has been emailed the same link.');
+      Alert.alert(
+        decision === 'approved' ? 'Approved' : 'Changes requested',
+        decision === 'approved'
+          ? 'You can now forward this to departments.'
+          : correctionSections
+            ? 'The candidate can sign back in to fix the flagged section(s).'
+            : 'The candidate can sign back in to update their submission.',
+      );
     } catch (e: any) {
       Alert.alert('Action failed', getErrorMessage(e));
     } finally {
@@ -209,16 +270,22 @@ export default function OnboardNotifyDetailScreen({ route, navigation }: any) {
           {!!record.department && <View style={st.kvRow}><Text style={st.kvKey}>Department</Text><Text style={st.kvVal}>{record.department}</Text></View>}
           {!!record.designation && <View style={st.kvRow}><Text style={st.kvKey}>Designation</Text><Text style={st.kvVal}>{record.designation}</Text></View>}
           {!!record.expectedJoiningDate && <View style={st.kvRow}><Text style={st.kvKey}>Expected Joining</Text><Text style={st.kvVal}>{String(record.expectedJoiningDate).slice(0, 10)}</Text></View>}
+          {typeof detail.completionPercent === 'number' && (
+            <View style={st.progressRow}>
+              <View style={st.progressBar}><View style={[st.progressFill, { width: `${detail.completionPercent}%` }]} /></View>
+              <Text style={st.progressTx}>{detail.completionPercent}% complete</Text>
+            </View>
+          )}
         </View>
 
         {response && (
           <View style={st.card}>
-            <SectionBlock title="Personal Details" data={response.personalDetails} />
+            <SectionBlock title="Personal Information" data={response.personalDetails} />
             <SectionBlock title="Contact Information" data={response.contactInfo} />
             <SectionBlock title="Emergency Contact" data={response.emergencyContact} />
-            <SectionBlock title="Education" data={response.education} />
-            <SectionBlock title="Bank / Payroll Details" data={response.bankDetails} />
-            {record.employeeType === 'experienced' && <SectionBlock title="Employment History" data={response.employmentHistory} />}
+            <RepeatBlock title="Education" data={response.education} />
+            <SectionBlock title="Bank Details" data={response.bankDetails} />
+            {record.employeeType === 'experienced' && <RepeatBlock title="Previous Employment" data={response.employmentHistory} />}
             {!!(response.documents ?? []).length && (
               <View style={st.sectionBlock}>
                 <Text style={st.sectionTitle}>Documents</Text>
@@ -237,6 +304,9 @@ export default function OnboardNotifyDetailScreen({ route, navigation }: any) {
               <View key={r.id} style={st.reviewRow}>
                 <Text style={st.reviewDecision}>{r.decision === 'approved' ? '✓ Approved' : '↺ Changes Requested'}</Text>
                 {!!r.comments && <Text style={st.reviewComment}>{r.comments}</Text>}
+                {(r.correctionSections ?? []).map((c: any, i: number) => (
+                  <Text key={i} style={st.reviewSection}>• {SECTION_LABELS[c.section] ?? c.section}: {c.reason}</Text>
+                ))}
               </View>
             ))}
           </View>
@@ -247,16 +317,41 @@ export default function OnboardNotifyDetailScreen({ route, navigation }: any) {
           <View style={st.card}>
             <Text style={st.sectionTitle}>Review Decision</Text>
             {commentsOpen && (
-              <TextInput
-                style={st.textarea}
-                placeholder="What needs to change?"
-                placeholderTextColor="#9CA3AF"
-                multiline
-                value={comments}
-                onChangeText={setComments}
-              />
+              <>
+                <TextInput
+                  style={st.textarea}
+                  placeholder="Overall note for the candidate"
+                  placeholderTextColor="#9CA3AF"
+                  multiline
+                  value={comments}
+                  onChangeText={setComments}
+                />
+                <Text style={[st.label, { marginTop: 2 }]}>Flag specific section(s) — optional, leave none flagged to reopen the whole form</Text>
+                <View style={st.fieldGrid}>
+                  {Object.keys(detail.sectionsDone ?? {}).map((key) => {
+                    const on = key in flaggedSections;
+                    return (
+                      <TouchableOpacity key={key} style={[st.fieldChip, on && st.fieldChipOn]} onPress={() => toggleFlaggedSection(key)}>
+                        <Text style={[st.fieldChipTx, on && st.fieldChipTxOn]}>{SECTION_LABELS[key] ?? key}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {Object.keys(flaggedSections).map((key) => (
+                  <View key={key} style={{ marginTop: 10 }}>
+                    <Text style={st.label}>Reason — {SECTION_LABELS[key] ?? key}</Text>
+                    <TextInput
+                      style={st.input}
+                      placeholder="What's wrong with this section?"
+                      placeholderTextColor="#9CA3AF"
+                      value={flaggedSections[key]}
+                      onChangeText={(v) => setFlaggedSections((p) => ({ ...p, [key]: v }))}
+                    />
+                  </View>
+                ))}
+              </>
             )}
-            <View style={st.row2}>
+            <View style={[st.row2, { marginTop: commentsOpen ? 14 : 0 }]}>
               <TouchableOpacity style={[st.actBtn, st.rejectBtn]} onPress={() => (commentsOpen ? doReview('changes_requested') : setCommentsOpen(true))} disabled={busy}>
                 <Text style={st.rejectTx}>Request Changes</Text>
               </TouchableOpacity>
@@ -374,15 +469,22 @@ const st = StyleSheet.create({
   card: { backgroundColor: T.card, borderRadius: 16, padding: 16, marginBottom: 14 },
   sectionBlock: { marginBottom: 14 },
   sectionTitle: { fontSize: 13, fontWeight: '800', color: T.ink, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 },
+  repeatDivider: { borderTopWidth: 1, borderTopColor: T.line, marginTop: 6, paddingTop: 6 },
   kvRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
   kvKey: { fontSize: 12.5, color: T.sub, flex: 1 },
   kvVal: { fontSize: 12.5, color: T.ink, fontWeight: '600', flex: 1, textAlign: 'right' },
 
   hint: { fontSize: 11.5, color: T.faint, marginBottom: 12, lineHeight: 15 },
 
+  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
+  progressBar: { flex: 1, height: 6, borderRadius: 3, backgroundColor: '#EEF0F3', overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 3, backgroundColor: T.primary },
+  progressTx: { fontSize: 11.5, fontWeight: '700', color: T.sub },
+
   reviewRow: { paddingVertical: 8, borderTopWidth: 1, borderTopColor: T.line },
   reviewDecision: { fontSize: 13, fontWeight: '700', color: T.ink },
   reviewComment: { fontSize: 12.5, color: T.sub, marginTop: 3, lineHeight: 17 },
+  reviewSection: { fontSize: 12, color: T.red.fg, marginTop: 3, lineHeight: 16 },
 
   textarea: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, padding: 13, fontSize: 14, color: T.ink, backgroundColor: '#FAFAFA', minHeight: 70, textAlignVertical: 'top', marginBottom: 12 },
   row2: { flexDirection: 'row', gap: 10 },

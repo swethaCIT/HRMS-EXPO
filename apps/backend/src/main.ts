@@ -4,6 +4,8 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
 import { json, urlencoded } from 'express';
+import type { Request, Response, NextFunction } from 'express';
+import { randomBytes } from 'crypto';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
@@ -20,8 +22,41 @@ process.on('uncaughtException', (err) => {
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: false });
 
-  // Security headers
-  app.use(helmet());
+  // Security headers.
+  //
+  // The onboarding portal (OnboardNotifyPortalController) serves a real HTML
+  // page with an inline <script> — helmet's default CSP (script-src 'self')
+  // blocks any inline script outright, which made that page render as
+  // silently blank rather than fail loudly. Rather than weaken script-src
+  // app-wide with 'unsafe-inline', generate a per-request nonce and only
+  // that exact <script> tag is allowed to run (see
+  // onboard-notify-portal.controller.ts, which reads res.locals.cspNonce).
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.locals.cspNonce = randomBytes(16).toString('base64');
+    next();
+  });
+
+  const isDev = process.env.NODE_ENV !== 'production';
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          scriptSrc: ["'self'", (_req: Request, res: Response) => `'nonce-${res.locals.cspNonce}'`],
+          // Helmet's default upgrades every request on the page to https,
+          // which is right for a real deployment but breaks a plain-HTTP
+          // LAN dev server outright (favicon/asset loads and even page
+          // navigation start failing with SSL errors). See helmet's own
+          // README section on this exact issue.
+          'upgrade-insecure-requests': isDev ? null : [],
+        },
+      },
+      // Same reasoning: these only function over HTTPS or "localhost" and
+      // are pure console noise (or breakage) against an LAN-IP http origin.
+      hsts: !isDev,
+      crossOriginOpenerPolicy: !isDev,
+      originAgentCluster: !isDev,
+    }),
+  );
 
   // gzip responses — big JSON list payloads over mobile networks compress well,
   // cutting bandwidth and time-to-last-byte under load.

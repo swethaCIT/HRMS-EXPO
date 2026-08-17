@@ -4,7 +4,7 @@ import { OnboardNotifyService } from './onboard-notify.service';
 import { CreateOnboardingRecordDto } from './dto/create-onboarding-record.dto';
 import { ReviewDecisionDto } from './dto/review-decision.dto';
 import { ForwardDecisionDto } from './dto/forward-decision.dto';
-import { OnboardStatus } from './entities/onboarding-record.entity';
+import { OnboardEmployeeType, OnboardStatus } from './entities/onboarding-record.entity';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -17,7 +17,7 @@ function actorOf(user: User): AuditActor {
   return { id: user.id, name: user.email?.split('@')[0], role: user.role };
 }
 
-/** HR/Admin-only management of pre-onboarding candidate records. Public, unauthenticated endpoints live in onboard-notify-public.controller.ts. */
+/** HR/Admin-only management of pre-onboarding candidate records. The candidate-facing login portal lives in onboard-notify-portal.controller.ts. */
 @ApiTags('onboard-notify')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -33,8 +33,24 @@ export class OnboardNotifyController {
   }
 
   @Get()
-  findAll(@Query('status') status?: OnboardStatus, @Query('limit') limit?: string, @Query('offset') offset?: string) {
-    return this.service.findAll(status, limit ? +limit : undefined, offset ? +offset : undefined);
+  findAll(
+    @Query('employeeType') employeeType?: OnboardEmployeeType,
+    @Query('status') status?: OnboardStatus,
+    @Query('department') department?: string,
+    @Query('joiningDateFrom') joiningDateFrom?: string,
+    @Query('joiningDateTo') joiningDateTo?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.service.findAll({
+      employeeType,
+      status,
+      department,
+      joiningDateFrom,
+      joiningDateTo,
+      limit: limit ? +limit : undefined,
+      offset: offset ? +offset : undefined,
+    });
   }
 
   @Get('field-catalog')

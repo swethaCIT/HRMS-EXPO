@@ -62,22 +62,28 @@ export const ONBOARD_FIELD_CATALOG: Record<string, { label: string; extract: (ct
   },
   emergencyContact: {
     label: 'Emergency Contact',
-    extract: ({ response }) => fmtObject(response?.emergencyContact, ['name', 'phone', 'relation']),
+    extract: ({ response }) => fmtObject(response?.emergencyContact, ['name', 'relationship', 'phone']),
   },
   education: {
     label: 'Education',
-    extract: ({ response }) => (response?.education ? 'On file (see HR review for details)' : undefined),
+    extract: ({ response }) => (response?.education?.records?.length ? 'On file (see HR review for details)' : undefined),
   },
   bankDetails: {
     label: 'Bank Details',
     extract: ({ response }) => fmtObject(response?.bankDetails, ['accountHolderName', 'bankName', 'accountNumber', 'ifsc']),
   },
   pan: { label: 'PAN', extract: ({ response }) => docSummary(response, 'pan') },
-  aadhaar: { label: 'Aadhaar', extract: ({ response }) => docSummary(response, 'aadhaar') },
+  identityProof: { label: 'Identity Proof', extract: ({ response }) => docSummary(response, 'identity_proof') },
   employmentHistory: {
     label: 'Previous Employment',
-    extract: ({ response }) =>
-      fmtObject(response?.employmentHistory, ['previousCompany', 'previousDesignation', 'totalExperience', 'noticePeriod']),
+    extract: ({ response }) => {
+      const records = response?.employmentHistory?.records as Record<string, any>[] | undefined;
+      if (!records?.length) return undefined;
+      return records
+        .map((r) => fmtObject(r, ['companyName', 'designation', 'totalExperience', 'reasonForLeaving']))
+        .filter(Boolean)
+        .join(' | ');
+    },
   },
   documentRequirements: { label: 'Documents on File', extract: ({ response }) => docSummary(response) },
 };
