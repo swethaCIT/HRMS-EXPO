@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { Between, DataSource, In, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -38,6 +38,8 @@ export interface OnboardListFilters {
 
 @Injectable()
 export class OnboardNotifyService {
+  private readonly logger = new Logger(OnboardNotifyService.name);
+
   constructor(
     @InjectRepository(OnboardingRecord) private readonly recordRepo: Repository<OnboardingRecord>,
     @InjectRepository(OnboardingFormResponse) private readonly responseRepo: Repository<OnboardingFormResponse>,
@@ -80,6 +82,21 @@ export class OnboardNotifyService {
     await this.mail.send(record.email, subject, body);
   }
 
+  /**
+   * Fires an email without making the caller's HTTP response wait on it.
+   * `MailService.send()` already never throws (it catches its own errors and
+   * returns `{delivered: false}`), so the only thing blocking here was SMTP
+   * round-trip latency — on some networks (e.g. Gmail from a fresh cloud IP)
+   * that alone was enough to trip the global 20s request timeout even though
+   * the record had already saved successfully. The record's existence never
+   * depends on the email actually sending.
+   */
+  private fireInviteEmail(record: OnboardingRecord, tempPassword: string): void {
+    void this.sendInviteEmail(record, tempPassword).catch((err) =>
+      this.logger.error(`Failed to send onboarding invite to ${record.email}: ${err?.message}`),
+    );
+  }
+
   async create(dto: CreateOnboardingRecordDto, actor: AuditActor): Promise<OnboardingRecord> {
     const onboardingRef = `OBN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${randomBytes(3).toString('hex').toUpperCase()}`;
     const tempPassword = this.auth.generateTempPassword();
@@ -104,7 +121,7 @@ export class OnboardNotifyService {
       }),
     );
 
-    await this.sendInviteEmail(record, tempPassword);
+    this.fireInviteEmail(record, tempPassword);
 
     void this.audit.record({
       action: AuditAction.CREATED,
@@ -175,7 +192,7 @@ export class OnboardNotifyService {
       throw new BadRequestException(`Cannot resend the invite once onboarding has status "${record.status}"`);
     }
     const tempPassword = await this.auth.resetTempPassword(record);
-    await this.sendInviteEmail(record, tempPassword);
+    this.fireInviteEmail(record, tempPassword);
     void this.audit.record({
       action: AuditAction.UPDATED,
       entityType: 'onboarding_record',
@@ -239,7 +256,9 @@ export class OnboardNotifyService {
         loginId: record.loginId,
         comments: [dto.comments ?? '', sectionList].filter(Boolean).join('\n\n'),
       });
-      await this.mail.send(record.email, subject, body);
+      void this.mail.send(record.email, subject, body).catch((err) =>
+        this.logger.error(`Failed to send change-request email to ${record.email}: ${err?.message}`),
+      );
 
       void this.audit.record({
         action: AuditAction.REJECTED,
@@ -324,12 +343,23 @@ export class OnboardNotifyService {
         body,
         NotificationType.ONBOARD_ROUTED,
       );
-      await this.notifications.dispatch(notification);
-      await this.forwardRepo.update(row.id, {
-        notificationId: notification.id,
-        status: notification.status === NotificationStatus.SENT ? OnboardForwardStatus.SENT : OnboardForwardStatus.FAILED,
-        sentAt: notification.sentAt ?? undefined,
-      });
+      await this.forwardRepo.update(row.id, { notificationId: notification.id });
+
+      // Fire-and-forget: on a slow mail network N forwards x up to ~20s each
+      // could blow the request past the global timeout despite every DB
+      // write already having succeeded. The forward rows start PENDING and
+      // update to SENT/FAILED once dispatch resolves — the HR review screen
+      // already polls, and NotificationsService's own retry cron covers a
+      // FAILED outcome, so nothing here needs the caller to wait on it.
+      void this.notifications
+        .dispatch(notification)
+        .then(() =>
+          this.forwardRepo.update(row.id, {
+            status: notification.status === NotificationStatus.SENT ? OnboardForwardStatus.SENT : OnboardForwardStatus.FAILED,
+            sentAt: notification.sentAt ?? undefined,
+          }),
+        )
+        .catch((err) => this.logger.error(`Failed to dispatch forward notification for ${record.onboardingRef}: ${err?.message}`));
     }
 
     return this.findOne(id);

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
@@ -32,6 +32,8 @@ function sanitizeDocuments(docs: OnboardDocumentMeta[]): Omit<OnboardDocumentMet
 
 @Injectable()
 export class OnboardNotifyPortalService {
+  private readonly logger = new Logger(OnboardNotifyPortalService.name);
+
   constructor(
     @InjectRepository(OnboardingRecord) private readonly recordRepo: Repository<OnboardingRecord>,
     @InjectRepository(OnboardingFormResponse) private readonly responseRepo: Repository<OnboardingFormResponse>,
@@ -157,7 +159,12 @@ export class OnboardNotifyPortalService {
       `${record.tempName} has submitted their onboarding form (${record.onboardingRef}). Review it in Onboard Notify.`,
       NotificationType.ONBOARD_SUBMITTED,
     );
-    await this.notifications.dispatch(notification);
+    // Fire-and-forget: the candidate's submission has already saved
+    // successfully by this point, and dispatch()'s own email/push send
+    // shouldn't be able to time out the response that confirms it.
+    void this.notifications.dispatch(notification).catch((err) =>
+      this.logger.error(`Failed to dispatch submission notification for ${record.onboardingRef}: ${err?.message}`),
+    );
 
     return this.dashboard(await this.recordRepo.findOneOrFail({ where: { id: record.id } }));
   }
