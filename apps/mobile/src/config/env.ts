@@ -22,7 +22,7 @@ import { Platform } from 'react-native';
  * empty, release builds fail loudly (see `assertApiConfigured`) instead of
  * silently falling back to offline demo data.
  */
-export const PRODUCTION_API_BASE_URL = '';
+export const PRODUCTION_API_BASE_URL = 'https://backend-production-0bd4.up.railway.app/api/v1';
 
 /**
  * Debug builds talk to a backend on the developer's machine.
